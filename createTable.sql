@@ -1,8 +1,7 @@
 CREATE SCHEMA our_things;
 SET search_path TO our_things;
 
-
-CREATE TABLE user_account (
+CREATE TABLE member (
     u_id BIGINT PRIMARY KEY,
     u_name VARCHAR(20) NOT NULL UNIQUE,
     u_mail VARCHAR(50) NOT NULL UNIQUE,
@@ -49,9 +48,9 @@ CREATE TABLE item (
     out_duration INT NOT NULL,
     u_id BIGINT NOT NULL,
     c_id BIGINT NOT NULL,
-    CONSTRAINT fk_item_user
+    CONSTRAINT fk_item_member
         FOREIGN KEY (u_id)
-        REFERENCES user_account(u_id)
+        REFERENCES member(u_id)
         ON DELETE NO ACTION
         ON UPDATE CASCADE,
     CONSTRAINT fk_item_category
@@ -115,7 +114,7 @@ CREATE TABLE reservation (
     u_id BIGINT NOT NULL,
 
     FOREIGN KEY (u_id)
-        REFERENCES user_account(u_id)
+        REFERENCES member(u_id)
         ON DELETE NO ACTION
         ON UPDATE CASCADE
 );
@@ -151,7 +150,7 @@ CREATE TABLE contribution (
     PRIMARY KEY (u_id, i_id),
 
     FOREIGN KEY (u_id)
-        REFERENCES user_account(u_id)
+        REFERENCES member(u_id)
         ON DELETE NO ACTION
         ON UPDATE CASCADE,
 
@@ -180,7 +179,7 @@ CREATE TABLE category_ban (
         ON UPDATE CASCADE,
 
     FOREIGN KEY (u_id)
-        REFERENCES user_account(u_id)
+        REFERENCES member(u_id)
         ON DELETE NO ACTION
         ON UPDATE CASCADE
 );
@@ -196,7 +195,7 @@ CREATE TABLE report (
     s_id BIGINT NOT NULL DEFAULT 0,
 
     FOREIGN KEY (u_id)
-        REFERENCES user_account(u_id)
+        REFERENCES member(u_id)
         ON DELETE NO ACTION
         ON UPDATE CASCADE,
 
@@ -247,12 +246,12 @@ CREATE TABLE review (
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
 
     FOREIGN KEY (reviewer_id)
-        REFERENCES user_account(u_id)
+        REFERENCES member(u_id)
         ON DELETE NO ACTION
         ON UPDATE CASCADE,
 
     FOREIGN KEY (reviewee_id)
-        REFERENCES user_account(u_id)
+        REFERENCES member(u_id)
         ON DELETE NO ACTION
         ON UPDATE CASCADE,
 
@@ -261,4 +260,5 @@ CREATE TABLE review (
         ON DELETE RESTRICT
         ON UPDATE CASCADE
 );
+
 

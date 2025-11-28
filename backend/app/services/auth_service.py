@@ -2,6 +2,7 @@ from sqlalchemy import text
 from app.extensions import db
 from app.utils.jwt_utils import generate_token
 from werkzeug.security import generate_password_hash, check_password_hash
+from app.models.user import User
 
 
 def login_service(username: str, password: str, login_as: str):
@@ -10,7 +11,7 @@ def login_service(username: str, password: str, login_as: str):
         text("""
             SELECT u_id, u_password, is_staff
             FROM our_things.user    -- 如果你在 public schema 就改成 public.user 或直接 user
-            WHERE u_mail = :mail
+            WHERE u_mail = :mail and is_active = true
         """),
         {"mail": username},
     ).mappings().first()
@@ -18,8 +19,7 @@ def login_service(username: str, password: str, login_as: str):
     if not user_row:
         return False, "user not found"
 
-    # 2. 比對密碼（這裡先簡單比對字串，之後你可以改成 hash）
-    if password != user_row["u_password"]:
+    if not check_password_hash(user_row["u_password"], password):
         return False, "wrong password"
 
     # 3. 檢查角色（假設 is_staff boolean）
@@ -48,7 +48,12 @@ def register_service(username: str, email: str, password: str):
         return False, "user already exists"
     
     # 2. 新增使用者
-    new_user = User(username=username, email=email, password=generate_password_hash(password))
+    u_id = db.session.execute(
+        text("""
+            SELECT MAX(u_id) as max_id from our_things.user
+        """),
+    ).mappings().first()["max_id"] + 1
+    new_user = User(u_id=u_id, u_name=username, u_mail=email, u_password=generate_password_hash(password), is_active=True)
     db.session.add(new_user)
     db.session.commit()
-    return True, "user created successfully"
+    return True,{"user_id": u_id, "name": username, "email": email}

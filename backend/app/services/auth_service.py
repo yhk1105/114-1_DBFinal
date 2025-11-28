@@ -2,58 +2,69 @@ from sqlalchemy import text
 from app.extensions import db
 from app.utils.jwt_utils import generate_token
 from werkzeug.security import generate_password_hash, check_password_hash
-from app.models.user import User
+from app.models.member import Member
 
 
-def login_service(username: str, password: str, login_as: str):
+def login_service(email: str, password: str, login_as: str):
     # 1. 查使用者
-    user_row = db.session.execute(
-        text("""
-            SELECT u_id, u_password, is_staff
-            FROM our_things.user    -- 如果你在 public schema 就改成 public.user 或直接 user
-            WHERE u_mail = :mail and is_active = true
-        """),
-        {"mail": username},
-    ).mappings().first()
+    if login_as == "member":
+        member_row = db.session.execute(
+            text("""
+                SELECT m_id, m_password
+                FROM our_things.member    -- 如果你在 public schema 就改成 public.user 或直接 user
+                WHERE m_mail = :mail and is_active = true
+            """),
+            {"mail": email},
+        ).mappings().first()
+        if not member_row:
+            return False, "member not found"
 
-    if not user_row:
-        return False, "user not found"
+        if not check_password_hash(member_row["m_password"], password):
+            return False, "wrong password"
 
-    if not check_password_hash(user_row["u_password"], password):
-        return False, "wrong password"
+        # 4. 產生 token
+        token = generate_token(member_row["m_id"], "member")
+        return True, {"token": token, "role": "member", "member_id": member_row["m_id"], "member_name": member_row["m_name"]}
+    elif login_as == "staff":
+        staff_row = db.session.execute(
+            text("""
+                SELECT s_id, s_password
+                FROM our_things.staff
+                WHERE s_mail = :mail and is_deleted = false
+            """),
+            {"mail": email},
+        ).mappings().first()
+        if not staff_row:
+            return False, "staff not found"
+        if not check_password_hash(staff_row["s_password"], password):
+            return False, "wrong password"
+        token = generate_token(staff_row["s_id"], "staff")
+        return True, {"token": token, "role": "staff", "staff_id": staff_row["s_id"], "staff_mail": staff_row["s_mail"]}
+    else:
+        return False, "invalid login_as"
 
-    # 3. 檢查角色（假設 is_staff boolean）
-    roles = ["member"]
-    if user_row["is_staff"]:
-        roles.append("staff")
-
-    if login_as not in roles:
-        return False, "you cannot login as this role"
-
-    # 4. 產生 token
-    token = generate_token(user_row["u_id"], login_as, roles)
-    return True, {"token": token, "role": login_as}
-
-def register_service(username: str, email: str, password: str):
+def register_service(name: str, email: str, password: str):
     # 1. 檢查使用者是否存在
-    user_row = db.session.execute(
+    member_row = db.session.execute(
         text("""
-            SELECT u_id
-            FROM our_things.user
-            WHERE u_mail = :mail
+            SELECT m_id
+            FROM our_things.member
+            WHERE m_mail = :mail
         """),
-        {"mail": username},
+        {"mail": name},
     ).mappings().first()
-    if user_row:
-        return False, "user already exists"
-    
-    # 2. 新增使用者
-    u_id = db.session.execute(
+    if member_row:
+        return False, "member already exists"
+    # 2. 檢查是否為學校信箱
+    if not email.endswith("@ntu.edu.tw"):
+        return False, "only ntu.edu.tw email is allowed"
+    # 3. 新增會員
+    m_id = db.session.execute(
         text("""
-            SELECT MAX(u_id) as max_id from our_things.user
+            SELECT MAX(m_id) as max_id from our_things.member
         """),
     ).mappings().first()["max_id"] + 1
-    new_user = User(u_id=u_id, u_name=username, u_mail=email, u_password=generate_password_hash(password), is_active=True)
-    db.session.add(new_user)
+    new_member = Member(m_id=m_id, m_name=name, m_mail=email, m_password=generate_password_hash(password), is_active=True)
+    db.session.add(new_member)
     db.session.commit()
-    return True,{"user_id": u_id, "name": username, "email": email}
+    return True,{"member_id": m_id, "member_name": name, "member_email": email}

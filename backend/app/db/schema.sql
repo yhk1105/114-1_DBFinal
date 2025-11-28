@@ -1,8 +1,8 @@
 CREATE TABLE member (
-    u_id BIGINT PRIMARY KEY,
-    u_name VARCHAR(20) NOT NULL UNIQUE,
-    u_mail VARCHAR(50) NOT NULL UNIQUE,
-    u_password VARCHAR(20) NOT NULL,
+    m_id BIGINT PRIMARY KEY,
+    m_name VARCHAR(20) NOT NULL UNIQUE,
+    m_mail VARCHAR(50) NOT NULL UNIQUE,
+    m_password VARCHAR(20) NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
@@ -19,6 +19,8 @@ CREATE TABLE category (
 
 CREATE TABLE staff (
     s_id BIGINT PRIMARY KEY DEFAULT 0,
+    s_mail VARCHAR(50) NOT NULL UNIQUE,
+    s_password VARCHAR(20) NOT NULL,
     role VARCHAR(20) NOT NULL CHECK(role IN ('Employee', 'Manager')),
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE
 );
@@ -43,11 +45,11 @@ CREATE TABLE item (
         CHECK (status IN ('Borrowed','Reservable','Not reservable')),
     description VARCHAR(200),
     out_duration INT NOT NULL,
-    u_id BIGINT NOT NULL,
+    m_id BIGINT NOT NULL,
     c_id BIGINT NOT NULL,
     CONSTRAINT fk_item_member
-        FOREIGN KEY (u_id)
-        REFERENCES member(u_id)
+        FOREIGN KEY (m_id)
+        REFERENCES member(m_id)
         ON DELETE NO ACTION
         ON UPDATE CASCADE,
     CONSTRAINT fk_item_category
@@ -108,10 +110,10 @@ CREATE TABLE reservation (
     r_id BIGINT PRIMARY KEY,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     create_at TIMESTAMP NOT NULL,
-    u_id BIGINT NOT NULL,
+    m_id BIGINT NOT NULL,
 
-    FOREIGN KEY (u_id)
-        REFERENCES member(u_id)
+    FOREIGN KEY (m_id)
+        REFERENCES member(m_id)
         ON DELETE NO ACTION
         ON UPDATE CASCADE
 );
@@ -141,13 +143,13 @@ CREATE TABLE reservation_detail (
 );
 
 CREATE TABLE contribution (
-    u_id BIGINT NOT NULL,
+    m_id BIGINT NOT NULL,
     i_id BIGINT NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT FALSE,
-    PRIMARY KEY (u_id, i_id),
+    PRIMARY KEY (m_id, i_id),
 
-    FOREIGN KEY (u_id)
-        REFERENCES member(u_id)
+    FOREIGN KEY (m_id)
+        REFERENCES member(m_id)
         ON DELETE NO ACTION
         ON UPDATE CASCADE,
 
@@ -160,10 +162,10 @@ CREATE TABLE contribution (
 CREATE TABLE category_ban (
     s_id BIGINT NOT NULL DEFAULT 0,
     c_id BIGINT NOT NULL,
-    u_id BIGINT NOT NULL,
+    m_id BIGINT NOT NULL,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     ban_at TIMESTAMP NOT NULL,
-    PRIMARY KEY (s_id, c_id, u_id),
+    PRIMARY KEY (s_id, c_id, m_id),
 
     FOREIGN KEY (s_id)
         REFERENCES staff(s_id)
@@ -175,8 +177,8 @@ CREATE TABLE category_ban (
         ON DELETE CASCADE
         ON UPDATE CASCADE,
 
-    FOREIGN KEY (u_id)
-        REFERENCES member(u_id)
+    FOREIGN KEY (m_id)
+        REFERENCES member(m_id)
         ON DELETE NO ACTION
         ON UPDATE CASCADE
 );
@@ -187,12 +189,12 @@ CREATE TABLE report (
     r_conclusion VARCHAR(10) CHECK(r_conclusion IN ('Withdraw','Suspend','Delist')),
     create_at TIMESTAMP NOT NULL,
     conclude_at TIMESTAMP,
-    u_id BIGINT NOT NULL,
+    m_id BIGINT NOT NULL,
     i_id BIGINT NOT NULL,
     s_id BIGINT NOT NULL DEFAULT 0,
 
-    FOREIGN KEY (u_id)
-        REFERENCES member(u_id)
+    FOREIGN KEY (m_id)
+        REFERENCES member(m_id)
         ON DELETE NO ACTION
         ON UPDATE CASCADE,
 
@@ -243,12 +245,12 @@ CREATE TABLE review (
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
 
     FOREIGN KEY (reviewer_id)
-        REFERENCES member(u_id)
+        REFERENCES member(m_id)
         ON DELETE NO ACTION
         ON UPDATE CASCADE,
 
     FOREIGN KEY (reviewee_id)
-        REFERENCES member(u_id)
+        REFERENCES member(m_id)
         ON DELETE NO ACTION
         ON UPDATE CASCADE,
 

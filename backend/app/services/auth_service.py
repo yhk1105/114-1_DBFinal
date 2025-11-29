@@ -30,7 +30,7 @@ def login_service(email: str, password: str, login_as: str):
 
         # 4. 產生 token
         token = generate_token(member_row["m_id"], "member")
-        return True, {"token": token, "role": "member", "member_id": member_row["m_id"], "member_name": member_row["m_name"]}
+        return True, {"token": token, "role": "member", "id": member_row["m_id"], "name": member_row["name"]}
     elif login_as == "staff":
         staff_row = db.session.execute(
             text("""
@@ -45,7 +45,7 @@ def login_service(email: str, password: str, login_as: str):
         if not check_password_hash(staff_row["s_password"], password):
             return False, "wrong password"
         token = generate_token(staff_row["s_id"], "staff")
-        return True, {"token": token, "role": "staff", "staff_id": staff_row["s_id"], "staff_mail": staff_row["s_mail"]}
+        return True, {"token": token, "role": "staff", "id": staff_row["s_id"], "name": staff_row["s_name"]}
     else:
         return False, "invalid login_as"
 

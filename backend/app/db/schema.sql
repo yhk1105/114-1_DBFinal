@@ -19,6 +19,7 @@ CREATE TABLE category (
 
 CREATE TABLE staff (
     s_id BIGINT PRIMARY KEY DEFAULT 0,
+    s_name VARCHAR(20) NOT NULL,
     s_mail VARCHAR(60) NOT NULL UNIQUE,
     s_password VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL CHECK(role IN ('Employee', 'Manager')),

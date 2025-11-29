@@ -3,8 +3,16 @@ from app.services.auth_service import login_service, register_service
 
 auth_bp = Blueprint("auth", __name__)
 
+
 @auth_bp.post("/login")
 def login():
+    """
+    處理使用者登入請求。
+    
+    接收 JSON 格式的 email 和 password，
+    驗證成功後回傳 JWT Token。
+    """
+
     data = request.get_json() or {}
     email = data.get("email")
     password = data.get("password")
@@ -18,8 +26,16 @@ def login():
     # result 放 token & role
     return jsonify(result)
 
+
 @auth_bp.post("/register")
 def register():
+    """
+    處理使用者註冊請求。
+    
+    接收 JSON 格式的 name、email 和 password，
+    註冊成功後回傳使用者 ID。
+    """
+
     data = request.get_json() or {}
     username = data.get("name")
     email = data.get("email")

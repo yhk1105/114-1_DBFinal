@@ -1,8 +1,8 @@
 CREATE TABLE member (
     m_id BIGINT PRIMARY KEY,
     m_name VARCHAR(20) NOT NULL UNIQUE,
-    m_mail VARCHAR(50) NOT NULL UNIQUE,
-    m_password VARCHAR(20) NOT NULL,
+    m_mail VARCHAR(60) NOT NULL UNIQUE,
+    m_password VARCHAR(255) NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
@@ -19,8 +19,8 @@ CREATE TABLE category (
 
 CREATE TABLE staff (
     s_id BIGINT PRIMARY KEY DEFAULT 0,
-    s_mail VARCHAR(50) NOT NULL UNIQUE,
-    s_password VARCHAR(20) NOT NULL,
+    s_mail VARCHAR(60) NOT NULL UNIQUE,
+    s_password VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL CHECK(role IN ('Employee', 'Manager')),
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE
 );
@@ -42,7 +42,7 @@ CREATE TABLE item (
     i_id BIGINT PRIMARY KEY,
     i_name VARCHAR(20) NOT NULL,
     status VARCHAR(15) NOT NULL 
-        CHECK (status IN ('Borrowed','Reservable','Not reservable')),
+        CHECK (status IN ('Borrowed','Reservable','Not reservable', 'Not verified')),
     description VARCHAR(200),
     out_duration INT NOT NULL,
     m_id BIGINT NOT NULL,

@@ -1,12 +1,18 @@
 from sqlalchemy import text
+from werkzeug.security import generate_password_hash, check_password_hash
 from app.extensions import db
 from app.utils.jwt_utils import generate_token
-from werkzeug.security import generate_password_hash, check_password_hash
 from app.models.member import Member
 
 
 def login_service(email: str, password: str, login_as: str):
-    # 1. 查使用者
+    """
+    處理使用者登入請求。
+    
+    接收 email 和 password，
+    驗證成功後回傳 JWT Token。
+    """
+
     if login_as == "member":
         member_row = db.session.execute(
             text("""
@@ -44,7 +50,13 @@ def login_service(email: str, password: str, login_as: str):
         return False, "invalid login_as"
 
 def register_service(name: str, email: str, password: str):
-    # 1. 檢查使用者是否存在
+    """
+    處理使用者註冊請求。
+    
+    接收 name、email 和 password，
+    註冊成功後回傳使用者 ID。
+    """
+
     member_row = db.session.execute(
         text("""
             SELECT m_id
@@ -61,9 +73,9 @@ def register_service(name: str, email: str, password: str):
     # 3. 新增會員
     m_id = db.session.execute(
         text("""
-            SELECT MAX(m_id) as max_id from our_things.member
+            SELECT count(m_id) as count from our_things.member
         """),
-    ).mappings().first()["max_id"] + 1
+    ).mappings().first()["count"] + 1
     new_member = Member(m_id=m_id, m_name=name, m_mail=email, m_password=generate_password_hash(password), is_active=True)
     db.session.add(new_member)
     db.session.commit()

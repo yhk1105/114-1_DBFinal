@@ -109,6 +109,8 @@ def update_item(token: str, i_id: int, data: dict):
                     WHERE item.i_id = :i_id and item.m_id = :user_id
                 """),
                 {"i_id": i_id, "user_id": user_id}).mappings().first()
+        if item_original["status"] == "Borrowed":
+            return False, "Item is borrowed, cannot be edited"
         if data.get("i_name"): # update name
             item_row = db.session.execute(
                 text("""

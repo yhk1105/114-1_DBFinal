@@ -1,5 +1,3 @@
-Item
-
 from flask import Blueprint, request, jsonify
 from app.services.item_service import get_item_detail, get_category_items, get_item_borrowed_time, upload_item, update_item
 

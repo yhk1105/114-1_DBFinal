@@ -1,4 +1,3 @@
-Me
 from flask import Blueprint, request, jsonify
 from app.services.me_service import get_profile_service, get_my_items, get_my_reservations, get_reservation_detail
 

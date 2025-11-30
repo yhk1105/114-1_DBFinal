@@ -63,6 +63,7 @@ CREATE TABLE item (
 CREATE TABLE item_pick (
     i_id BIGINT NOT NULL,
     p_id BIGINT NOT NULL,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (i_id, p_id),
 
     FOREIGN KEY (i_id)

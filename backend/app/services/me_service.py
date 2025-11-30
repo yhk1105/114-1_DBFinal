@@ -104,8 +104,8 @@ def get_reservation_detail(token: str, r_id: int):
                 and reservation.is_deleted = false
                 order by est_start_at asc
             """),
-            {"r_id": r_id, "m_id": member_id}).mappings().first()
-        return True, {"reservation_detail": reservation_detail_row}
+            {"r_id": r_id, "m_id": member_id}).mappings().all()
+        return True, {"reservation_details": reservation_detail_row}
     else:
         return False, "Only members can get reservation detail"
 

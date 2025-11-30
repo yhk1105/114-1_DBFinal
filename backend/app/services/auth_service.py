@@ -8,7 +8,7 @@ from app.models.member import Member
 def login_service(email: str, password: str, login_as: str):
     """
     處理使用者登入請求。
-    
+
     接收 email 和 password，
     驗證成功後回傳 JWT Token。
     """
@@ -49,14 +49,16 @@ def login_service(email: str, password: str, login_as: str):
     else:
         return False, "invalid login_as"
 
+
 def register_service(name: str, email: str, password: str):
     """
     處理使用者註冊請求。
-    
+
     接收 name、email 和 password，
     註冊成功後回傳使用者 ID。
     """
-
+    db.session.execute(text("LOCK TABLE our_things.member IN EXCLUSIVE MODE"))
+        
     member_row = db.session.execute(
         text("""
             SELECT m_id
@@ -66,9 +68,11 @@ def register_service(name: str, email: str, password: str):
         {"mail": name},
     ).mappings().first()
     if member_row:
+        db.session.rollback()
         return False, "member already exists"
     # 2. 檢查是否為學校信箱
     if not email.endswith("@ntu.edu.tw"):
+        db.session.rollback()
         return False, "only ntu.edu.tw email is allowed"
     # 3. 新增會員
     m_id = db.session.execute(
@@ -76,7 +80,8 @@ def register_service(name: str, email: str, password: str):
             SELECT count(m_id) as count from our_things.member
         """),
     ).mappings().first()["count"] + 1
-    new_member = Member(m_id=m_id, m_name=name, m_mail=email, m_password=generate_password_hash(password), is_active=True)
+    new_member = Member(m_id=m_id, m_name=name, m_mail=email,
+                        m_password=generate_password_hash(password), is_active=True)
     db.session.add(new_member)
     db.session.commit()
-    return True,{"member_id": m_id, "member_name": name, "member_email": email}
+    return True, {"member_id": m_id, "member_name": name, "member_email": email}

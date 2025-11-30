@@ -13,8 +13,13 @@ def get_profile():
     取得使用者 profile 後回傳。
     """
 
-    data = request.get_json() or {}
-    token = data.get("token")
+    auth_header = request.headers.get("Authorization")
+     
+    # 檢查格式是否正確 (Bearer <token>)
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Unauthorized: Missing or invalid token"}), 401
+        
+    token = auth_header.split(" ")[1]  # 取出 "Bearer " 後面的 token 字串
     if not token:
         return jsonify({"error": "Unauthorized"}), 401
     ok, result = get_profile_service(token)
@@ -31,8 +36,13 @@ def get_items():
     取得使用者物品後回傳。
     """
 
-    data = request.get_json() or {}
-    token = data.get("token")
+    auth_header = request.headers.get("Authorization")
+     
+    # 檢查格式是否正確 (Bearer <token>)
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Unauthorized: Missing or invalid token"}), 401
+        
+    token = auth_header.split(" ")[1]  # 取出 "Bearer " 後面的 token 字串
     if not token:
         return jsonify({"error": "Unauthorized"}), 401
     ok, result = get_my_items(token)
@@ -49,8 +59,13 @@ def get_reservations():
     取得使用者預約後回傳。
     """
 
-    data = request.get_json() or {}
-    token = data.get("token")
+    auth_header = request.headers.get("Authorization")
+     
+    # 檢查格式是否正確 (Bearer <token>)
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Unauthorized: Missing or invalid token"}), 401
+        
+    token = auth_header.split(" ")[1]  # 取出 "Bearer " 後面的 token 字串
     if not token:
         return jsonify({"error": "Unauthorized"}), 401
     ok, result = get_my_reservations(token)
@@ -67,8 +82,13 @@ def get_this_reservation_detail(r_id):
     取得使用者預約詳細資訊後回傳。
     """
 
-    data = request.get_json() or {}
-    token = data.get("token")
+    auth_header = request.headers.get("Authorization")
+     
+    # 檢查格式是否正確 (Bearer <token>)
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Unauthorized: Missing or invalid token"}), 401
+        
+    token = auth_header.split(" ")[1]  # 取出 "Bearer " 後面的 token 字串
     if not token:
         return jsonify({"error": "Unauthorized"}), 401
     ok, result = get_reservation_detail(token, r_id)

@@ -57,15 +57,13 @@ def register_service(name: str, email: str, password: str):
     接收 name、email 和 password，
     註冊成功後回傳使用者 ID。
     """
-    db.session.execute(text("LOCK TABLE our_things.member IN EXCLUSIVE MODE"))
-        
     member_row = db.session.execute(
         text("""
             SELECT m_id
             FROM our_things.member
             WHERE m_mail = :mail
         """),
-        {"mail": name},
+        {"mail": email},
     ).mappings().first()
     if member_row:
         db.session.rollback()
@@ -75,13 +73,8 @@ def register_service(name: str, email: str, password: str):
         db.session.rollback()
         return False, "only ntu.edu.tw email is allowed"
     # 3. 新增會員
-    m_id = db.session.execute(
-        text("""
-            SELECT count(m_id) as count from our_things.member
-        """),
-    ).mappings().first()["count"] + 1
-    new_member = Member(m_id=m_id, m_name=name, m_mail=email,
+    new_member = Member(m_name=name, m_mail=email,
                         m_password=generate_password_hash(password), is_active=True)
     db.session.add(new_member)
     db.session.commit()
-    return True, {"member_id": m_id, "member_name": name, "member_email": email}
+    return True, {"member_id": new_member.m_id, "member_name": name, "member_email": email}

@@ -1,5 +1,5 @@
 CREATE TABLE member (
-    m_id BIGINT PRIMARY KEY,
+    m_id BIGSERIAL PRIMARY KEY,
     m_name VARCHAR(20) NOT NULL UNIQUE,
     m_mail VARCHAR(60) NOT NULL UNIQUE,
     m_password VARCHAR(255) NOT NULL,
@@ -7,7 +7,7 @@ CREATE TABLE member (
 );
 
 CREATE TABLE category (
-    c_id BIGINT PRIMARY KEY,
+    c_id BIGSERIAL PRIMARY KEY,
     c_name VARCHAR(20) NOT NULL,
     parent_c_id BIGINT,
     CONSTRAINT fk_category_parent
@@ -18,7 +18,7 @@ CREATE TABLE category (
 );
 
 CREATE TABLE staff (
-    s_id BIGINT PRIMARY KEY DEFAULT 0,
+    s_id BIGSERIAL PRIMARY KEY,
     s_name VARCHAR(20) NOT NULL,
     s_mail VARCHAR(60) NOT NULL UNIQUE,
     s_password VARCHAR(255) NOT NULL,
@@ -26,13 +26,9 @@ CREATE TABLE staff (
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE
 );
 
---先插員工編號 0 的預設員工帳號
-INSERT INTO staff (s_id, role, is_deleted)
-VALUES (0, 'Employee', FALSE)
-ON CONFLICT (s_id) DO NOTHING;
 
 CREATE TABLE pick_up_place (
-    p_id BIGINT PRIMARY KEY,
+    p_id BIGSERIAL PRIMARY KEY,
     p_name VARCHAR(100) NOT NULL,
     address VARCHAR(100) NOT NULL,
     note VARCHAR(200),
@@ -40,7 +36,7 @@ CREATE TABLE pick_up_place (
 );
 
 CREATE TABLE item (
-    i_id BIGINT PRIMARY KEY,
+    i_id BIGSERIAL PRIMARY KEY,
     i_name VARCHAR(20) NOT NULL,
     status VARCHAR(15) NOT NULL 
         CHECK (status IN ('Borrowed','Reservable','Not reservable', 'Not verified')),
@@ -91,7 +87,7 @@ CREATE TABLE item_photo (
 );
 
 CREATE TABLE item_verification (
-    iv_id BIGINT PRIMARY KEY,
+    iv_id BIGSERIAL PRIMARY KEY,
     v_conclusion VARCHAR(10) CHECK(v_conclusion IN ('Pass','Fail','Pending')),
     create_at TIMESTAMP NOT NULL,
     i_id BIGINT NOT NULL,
@@ -109,7 +105,7 @@ CREATE TABLE item_verification (
 );
 
 CREATE TABLE reservation (
-    r_id BIGINT PRIMARY KEY,
+    r_id BIGSERIAL PRIMARY KEY,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     create_at TIMESTAMP NOT NULL,
     m_id BIGINT NOT NULL,
@@ -121,7 +117,7 @@ CREATE TABLE reservation (
 );
 
 CREATE TABLE reservation_detail (
-    rd_id BIGINT PRIMARY KEY,
+    rd_id BIGSERIAL PRIMARY KEY,
     est_start_at TIMESTAMP NOT NULL,
     est_due_at TIMESTAMP NOT NULL,
     r_id BIGINT NOT NULL,
@@ -186,14 +182,14 @@ CREATE TABLE category_ban (
 );
 
 CREATE TABLE report (
-    re_id BIGINT PRIMARY KEY,
+    re_id BIGSERIAL PRIMARY KEY,
     comment VARCHAR(200) NOT NULL,
-    r_conclusion VARCHAR(10) CHECK(r_conclusion IN ('Withdraw','Suspend','Delist')),
+    r_conclusion VARCHAR(10) CHECK(r_conclusion IN ('Withdraw','Ban Category','Delist','Pending')),
     create_at TIMESTAMP NOT NULL,
     conclude_at TIMESTAMP,
     m_id BIGINT NOT NULL,
     i_id BIGINT NOT NULL,
-    s_id BIGINT NOT NULL DEFAULT 0,
+    s_id BIGINT NOT NULL ,
 
     FOREIGN KEY (m_id)
         REFERENCES member(m_id)
@@ -212,10 +208,10 @@ CREATE TABLE report (
 );
 
 CREATE TABLE loan (
-    l_id BIGINT PRIMARY KEY,
+    l_id BIGSERIAL PRIMARY KEY,
     rd_id BIGINT NOT NULL,
-    actual_start_at TIMESTAMP NOT NULL,
-    actual_due_at TIMESTAMP NOT NULL,
+    actual_start_at TIMESTAMP,
+    actual_return_at TIMESTAMP,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
 
     FOREIGN KEY (rd_id)
@@ -238,7 +234,7 @@ CREATE TABLE loan_event (
 );
 
 CREATE TABLE review (
-    review_id BIGINT PRIMARY KEY,
+    review_id BIGSERIAL PRIMARY KEY,
     score INT NOT NULL CHECK(score BETWEEN 1 AND 5),
     comment VARCHAR(200) NOT NULL,
     reviewer_id BIGINT NOT NULL,

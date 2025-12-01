@@ -9,11 +9,11 @@ from sqlalchemy.exc import OperationalError # 用來抓取 Serialization Failure
 import time
 import random
 from app.models.item_verification import ItemVerification
+from app.services.contribution import change_contribution
+from app.models.item_pick import Item_Pick
+
 def pick_a_staff():
     """
-    處理隨機選擇員工請求。
-
-    接收 JWT Token，
     隨機選擇員工後回傳。
     """
     staff_row = db.session.execute(
@@ -94,22 +94,32 @@ def upload_item(token: str, data: dict):
     if not user_id:
         return False, "Unauthorized"
     if active_role == "member":
-        db.session.execute(
-            text("LOCK TABLE our_things.item IN EXCLUSIVE MODE"))
-
-        item_id = db.session.execute(
+        session = db.session
+        try:
+            session.connection().execution_options(
+                isolation_level="SERIALIZABLE"
+            )
+            session.begin()
+            item_id = session.execute(
             text("""
                 SELECT MAX(i_id) + 1 FROM our_things.item
             """)).scalar()
-        if not item_id:
-            item_id = 1
-        item_row = Item(i_id=item_id, i_name=data["i_name"], status="Not verified",
+            if not item_id:
+                item_id = 1
+            item_row = Item(i_id=item_id, i_name=data["i_name"], status="Not verified",
                         description=data["description"], out_duration=data["out_duration"], m_id=user_id, c_id=data["c_id"])
-        db.session.add(item_row)
-        contribution_row = Contribution(
-            u_id=user_id, i_id=item_id, is_active=True)
-        db.session.add(contribution_row)
-        db.session.commit()
+            for p_id in data["p_id_list"]:
+                item_pick_row = Item_Pick(i_id=item_id, p_id=p_id)
+                session.add(item_pick_row)
+            session.add(item_row)
+            contribution_row = Contribution(
+                u_id=user_id, i_id=item_id, is_active=True)
+            session.add(contribution_row)
+            session.commit()
+            return True, {"item_id": item_id, "name": data["i_name"], "status": data["status"]}
+        except Exception as e:
+            session.rollback()
+            return False, str(e)
         return True, {"item_id": item_id, "name": data["i_name"], "status": data["status"]}
 
 
@@ -168,31 +178,7 @@ def update_item(token: str, i_id: int, data: dict):
                         if item_original["status"] == "Borrowed":
                             return False, "Item is borrowed"
                         if item_original["is_active"] == False:
-                            check_category_contribution = db.session.execute(
-                                text("""
-                                SELECT i_id
-                                FROM our_things.contribution
-                                join our_things.item on contribution.i_id = item.i_id
-                                WHERE m_id = :user_id and item.c_id = :item_original_c_id and is_active = true
-                            """),
-                                {"user_id": user_id, "item_original_c_id": item_original["c_id"]}).mappings().first()
-                            if not check_category_contribution:
-                                return False, "Cannot change status"
-                            else:
-                                item_row = db.session.execute(
-                                    text("""
-                                        UPDATE our_things.contribution
-                                        SET is_active = false
-                                        WHERE i_id = :i_id
-                                    """),
-                                    {"i_id": check_category_contribution["i_id"]}).mappings().first()
-                                item_row = db.session.execute(
-                                    text("""
-                                    UPDATE our_things.contribution
-                                    SET is_active = true
-                                    WHERE i_id = :i_id
-                                """),
-                                    {"i_id": i_id}).mappings().first()
+                            change_contribution(user_id, i_id)
                     elif data["status"] == "Reservable":
                         item_row = db.session.execute(
                             text("""
@@ -325,7 +311,7 @@ def verify_item(token: str, i_id: int):
         staff_id = pick_a_staff()
         if not staff_id:
             return False, "No staff available"
-        item_verification_row = ItemVerification(iv_id=iv_id, i_id=i_id, s_id=staff_id, create_at=datetime.now())
+        item_verification_row = ItemVerification(iv_id=iv_id, i_id=i_id, s_id=staff_id, create_at=datetime.now(), v_conclusion="Pending")
         db.session.add(item_verification_row)
         db.session.commit()
         return True, {"item_verification_id": item_verification_row.iv_id}

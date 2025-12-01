@@ -6,7 +6,7 @@ from app.utils.jwt_utils import get_user
 def get_profile_service(token: str):
     """
     處理取得使用者 profile 請求。
-    
+
     接收 JWT Token，
     取得使用者 profile 後回傳。
     """
@@ -33,10 +33,11 @@ def get_profile_service(token: str):
             {"s_id": user_id}).mappings().first()
         return True, {"name": staff_row["s_name"], "email": staff_row["s_mail"]}
 
+
 def get_my_items(token: str):
     """
     處理取得使用者物品請求。
-    
+
     接收 JWT Token，
     取得使用者物品後回傳。
     """
@@ -56,10 +57,11 @@ def get_my_items(token: str):
     else:
         return False, "Only members can get items"
 
+
 def get_my_reservations(token: str):
     """
     處理取得使用者預約請求。
-    
+
     接收 JWT Token，
     取得使用者預約後回傳。
     """
@@ -81,10 +83,11 @@ def get_my_reservations(token: str):
     else:
         return False, "Only members can get reservations"
 
+
 def get_reservation_detail(token: str, r_id: int):
     """
     處理取得使用者預約詳細資訊請求。
-    
+
     接收 JWT Token 和預約 ID，
     取得使用者預約詳細資訊後回傳。
     """
@@ -109,3 +112,47 @@ def get_reservation_detail(token: str, r_id: int):
     else:
         return False, "Only members can get reservation detail"
 
+
+def get_reviewable_items(token: str):
+    """
+    處理取得使用者可評論的物品請求。
+
+    接收 JWT Token，
+    取得使用者可評論的物品後回傳。
+    """
+
+    user_id, active_role = get_user(token)
+    if not user_id:
+        return False, "Unauthorized"
+    if active_role == "member":
+        reviewable_items_row = db.session.execute(
+            text("""
+                SELECT 
+                    l.l_id,
+                    i.i_id,
+                    i.i_name,
+                    CASE 
+                        WHEN r.m_id = :m_id THEN owner.m_name 
+                        ELSE borrower.m_name 
+                    END AS object_name,
+                    l.actual_return_at
+                FROM our_things.loan l
+                JOIN our_things.reservation_detail rd ON l.rd_id = rd.rd_id
+                JOIN our_things.reservation r ON rd.r_id = r.r_id
+                JOIN our_things.item i ON rd.i_id = i.i_id
+                JOIN our_things.member borrower ON r.m_id = borrower.m_id
+                JOIN our_things.member owner ON i.m_id = owner.m_id
+                WHERE 
+                    l.actual_return_at IS NOT NULL
+                    AND (r.m_id = :m_id OR i.m_id = :m_id)
+                    AND NOT EXISTS (
+                        SELECT 1 
+                        FROM our_things.review rv 
+                        WHERE rv.l_id = l.l_id 
+                        AND rv.reviewer_id = :m_id
+                    )
+            """),
+            {"m_id": user_id}).mappings().all()
+        return True, {"reviewable_items": reviewable_items_row}
+    else:
+        return False, "Only members can get reviewable items"

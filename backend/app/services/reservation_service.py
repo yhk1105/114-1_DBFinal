@@ -56,31 +56,14 @@ def create_reservation(token: str, data: dict):
         session = db.session
         try:
             session.connection().execution_options(
-                isolation_level="REPEATABLE READ"
+                isolation_level="SERIALIZABLE"
             )
             session.begin()
-            r_id = session.execute(text("""
-                SELECT max(r_id) as max
-                FROM our_things.reservation
-            """)).mappings().first()["max"]
-            if not r_id:
-                r_id = 1
-            else:
-                r_id = r_id + 1
-            reservation = Reservation(
-                r_id=r_id,
+            new_reservation = Reservation(
                 m_id=m_id,
                 create_at=datetime.now(),
                 is_deleted=False
             )
-            rd_id = session.execute(text("""
-                SELECT max(rd_id) as max
-                FROM our_things.reservation_detail
-            """)).mappings().first()["max"]
-            if not rd_id:
-                rd_id = 1
-            else:
-                rd_id = rd_id + 1
             for rd in data["rd_list"]:
                 # 將字串轉為 datetime 物件 (如果傳入是字串)
                 # 假設 data["rd_list"] 裡的日期是 ISO 格式字串，需要先 parse
@@ -94,32 +77,56 @@ def create_reservation(token: str, data: dict):
                 if not check_item_available(rd["i_id"], rd["p_id"], start_at, due_at):
                     session.rollback()  # 確保 rollback
                     return False, f"Item {rd['i_id']} is not available during selected time"
+                cat = session.execute(text("""
+                    SELECT item.c_id, category.c_name
+                    FROM our_things.item
+                    join our_things.category on item.c_id = category.c_id
+                    WHERE i_id = :i_id
+                """), {
+                    "i_id": rd["i_id"]
+                }).mappings().first()
+                check_ban = db.session.execute(text("""
+                    SELECT COUNT(*)
+                    FROM our_things.category_ban
+                    WHERE c_id = :c_id and m_id = :m_id and is_deleted = false
+                """), {
+                    "c_id": cat["c_id"],
+                    "m_id": m_id,
+                }).scalar()
+                if check_ban > 0:
+                    session.rollback()
+                    return False, f"You are banned from {cat['c_name']} category"
 
-                reservation_detail = ReservationDetail(
-                    rd_id=rd_id,
-                    r_id=r_id,
+                check_contribution = db.session.execute(text("""
+                    SELECT i_id
+                    FROM our_things.contribution
+                    WHERE c_id = :c_id and m_id = :m_id
+                """), {
+                    "c_id": cat["c_id"],
+                    "m_id": m_id,
+                }).mappings().all()
+                if len(check_contribution) > 0:
+                    session.execute(text("""
+                    UPDATE our_things.contribution
+                    SET is_active = true
+                    WHERE i_id = :i_id and m_id = :m_id
+                    """), {
+                        "i_id": check_contribution[0]["i_id"],
+                        "m_id": m_id,
+                    })
+                else:
+                    session.rollback()
+                    return False, f"Your contribution to {cat["c_name"]}"
+                new_reservation_detail = ReservationDetail(
+                    r_id=new_reservation.r_id,
                     i_id=rd["i_id"],
                     p_id=rd["p_id"],
                     est_start_at=start_at,
                     est_due_at=due_at,
-                    is_deleted=False  # 注意：ReservationDetail model 沒有 is_deleted，是跟著 Reservation 走的，這邊可能多餘或 schema 不符，先依 ReservationDetail 定義移除
-                )
-                # 檢查 ReservationDetail 是否真的有 is_deleted 欄位，剛才 read_file 顯示只有 r_id, i_id, p_id, est_start, est_due
-                # 所以不需要 is_deleted
-
-                # 修正：重新建立物件，不含 is_deleted
-                reservation_detail = ReservationDetail(
-                    rd_id=rd_id,
-                    r_id=r_id,
-                    i_id=rd["i_id"],
-                    p_id=rd["p_id"],
-                    est_start_at=start_at,
-                    est_due_at=due_at
                 )
 
-                session.add(reservation_detail)
-                rd_id = rd_id + 1
-            session.add(reservation)
+                session.add(new_reservation_detail)
+            session.add(new_reservation)
             session.commit()
             return True, "OK"
         except Exception as e:

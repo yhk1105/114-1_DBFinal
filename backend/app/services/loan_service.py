@@ -24,12 +24,6 @@ def create_loan_for_upcoming_reservations(hours_ahead: int = 24):
         # 這裡假設 l_id 是手動管理的 (schema 沒寫 serial)，所以用 MAX + ROW_NUMBER 方式
 
         # 先鎖定 loan 表以計算 ID
-        db.session.execute(
-            text("LOCK TABLE our_things.loan IN EXCLUSIVE MODE"))
-
-        current_max_id = db.session.execute(
-            text("SELECT COALESCE(MAX(l_id), 0) FROM our_things.loan")).scalar()
-
         # 找出需要建立 loan 的 rd_id
         pending_details = db.session.execute(text("""
             SELECT rd.rd_id, rd.est_start_at, rd.est_due_at
@@ -47,7 +41,6 @@ def create_loan_for_upcoming_reservations(hours_ahead: int = 24):
         # 批量插入 Loan
         values = []
         for idx, detail in enumerate(pending_details):
-            new_l_id = current_max_id + idx + 1
             # 注意：actual_start_at 和 actual_due_at 初始值設為 est 值，或者設為 null (視 schema 限制)
             # Schema 定義 loan 的 actual_start_at/due_at 是 NOT NULL
             # 所以這裡我們暫時填入 est 的時間作為預設，等到實際 Handover 時再更新 (或是 schema 設計上這兩個欄位應該要是 nullable?)
@@ -55,7 +48,6 @@ def create_loan_for_upcoming_reservations(hours_ahead: int = 24):
             # 根據現有 schema NOT NULL constraint，我們先填入 est 時間
 
             values.append({
-                "l_id": new_l_id,
                 "rd_id": detail["rd_id"],
                 "actual_start_at": None,  # 暫填
                 "actual_return_at": None,     # 暫填
@@ -64,8 +56,8 @@ def create_loan_for_upcoming_reservations(hours_ahead: int = 24):
 
         if values:
             db.session.execute(text("""
-                INSERT INTO our_things.loan (l_id, rd_id, actual_start_at, actual_return_at, is_deleted)
-                VALUES (:l_id, :rd_id, :actual_start_at, :actual_return_at, :is_deleted)
+                INSERT INTO our_things.loan (rd_id, actual_start_at, actual_return_at, is_deleted)
+                VALUES (:rd_id, :actual_start_at, :actual_return_at, :is_deleted)
             """), values)
 
         db.session.commit()

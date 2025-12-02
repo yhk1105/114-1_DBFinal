@@ -10,7 +10,7 @@ def get_root_category(session, c_id: int) -> int:
         WITH RECURSIVE category_path AS (
             -- 起始點：從給定的 category 開始
             SELECT c_id, parent_c_id, c_id as root_c_id
-            FROM our_things.category
+            FROM category
             WHERE c_id = :c_id
             
             UNION ALL
@@ -21,7 +21,7 @@ def get_root_category(session, c_id: int) -> int:
                        WHEN c.parent_c_id IS NULL THEN c.c_id 
                        ELSE cp.root_c_id 
                    END as root_c_id
-            FROM our_things.category c
+            FROM category c
             JOIN category_path cp ON c.c_id = cp.parent_c_id
             WHERE cp.parent_c_id IS NOT NULL
         )
@@ -44,8 +44,8 @@ def change_contribution(session, m_id: int, i_id: int) -> bool:
     item_original = session.execute(
         text("""
             SELECT i_id, i_name, status, description, out_duration, c_id, is_active 
-            FROM our_things.item
-            JOIN our_things.contribution ON item.i_id = contribution.i_id
+            FROM item
+            JOIN contribution ON item.i_id = contribution.i_id
             WHERE item.i_id = :i_id AND item.m_id = :user_id
         """),
         {"i_id": i_id, "user_id": m_id}
@@ -56,7 +56,7 @@ def change_contribution(session, m_id: int, i_id: int) -> bool:
 
     # 2. 檢查當前 contribution 的狀態
     check_this_contribution = session.execute(text("""
-        SELECT is_active FROM our_things.contribution
+        SELECT is_active FROM contribution
         WHERE m_id = :m_id AND i_id = :i_id
     """), {
         "m_id": m_id,
@@ -80,8 +80,8 @@ def change_contribution(session, m_id: int, i_id: int) -> bool:
     check_root_category_contribution = session.execute(
         text("""
             SELECT contribution.i_id
-            FROM our_things.contribution
-            JOIN our_things.item ON contribution.i_id = item.i_id
+            FROM contribution
+            JOIN item ON contribution.i_id = item.i_id
             WHERE contribution.m_id = :m_id 
             AND contribution.is_active = true
             AND contribution.i_id != :current_i_id
@@ -89,13 +89,13 @@ def change_contribution(session, m_id: int, i_id: int) -> bool:
                 -- 找到 root category 下的所有子類別（包括 root 自己）
                 WITH RECURSIVE category_tree AS (
                     -- 起始點：root category
-                    SELECT c_id FROM our_things.category WHERE c_id = :root_c_id
+                    SELECT c_id FROM category WHERE c_id = :root_c_id
                     
                     UNION ALL
                     
                     -- 遞迴向下查找所有子類別
                     SELECT c.c_id 
-                    FROM our_things.category c
+                    FROM category c
                     JOIN category_tree ct ON c.parent_c_id = ct.c_id
                 )
                 SELECT c_id FROM category_tree
@@ -115,7 +115,7 @@ def change_contribution(session, m_id: int, i_id: int) -> bool:
 
     # 7. 如果找到了，將舊的設為 inactive，將新的設為 active
     session.execute(text("""
-        UPDATE our_things.contribution
+        UPDATE contribution
         SET is_active = false
         WHERE i_id = :old_i_id
     """), {
@@ -123,7 +123,7 @@ def change_contribution(session, m_id: int, i_id: int) -> bool:
     })
 
     session.execute(text("""
-        UPDATE our_things.contribution
+        UPDATE contribution
         SET is_active = true
         WHERE i_id = :i_id
     """), {

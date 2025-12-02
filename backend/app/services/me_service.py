@@ -21,27 +21,27 @@ def get_profile_service(token: str):
             text("""
                 with owner_rate as(
                     SELECT owner.m_id, AVG(review.score) as owner_rate
-                    FROM our_things.member as owner
-                    join our_things.review on owner.m_id = review.reviewee_id
-                    join our_things.loan on review.l_id = loan.l_id
-                    join our_things.reservation on loan.rd_id = reservation.rd_id
-                    join our_things.reservation_detail on reservation.r_id = reservation_detail.r_id
-                    join our_things.item on reservation_detail.i_id = item.i_id
-                    join our_things.category on item.c_id = category.c_id
+                    FROM member as owner
+                    join review on owner.m_id = review.reviewee_id
+                    join loan on review.l_id = loan.l_id
+                    join reservation on loan.rd_id = reservation.rd_id
+                    join reservation_detail on reservation.r_id = reservation_detail.r_id
+                    join item on reservation_detail.i_id = item.i_id
+                    join category on item.c_id = category.c_id
                     WHERE owner.m_id = :m_id
                     group by owner.m_id
                 ),
                 borrower_rate as(
                     SELECT borrower.m_id, AVG(review.score) as borrower_rate
-                    FROM our_things.member as borrower
-                    join our_things.review on borrower.m_id = review.reviewee_id
-                    join our_things.loan on review.l_id = loan.l_id
-                    join our_things.reservation on loan.rd_id = reservation.rd_id and reservation.m_id = :m_id
+                    FROM member as borrower
+                    join review on borrower.m_id = review.reviewee_id
+                    join loan on review.l_id = loan.l_id
+                    join reservation on loan.rd_id = reservation.rd_id and reservation.m_id = :m_id
                     where borrower.m_id = :m_id
                     group by borrower.m_id
                 )
                 SELECT m_name, m_mail, owner_rate, borrower_rate
-                FROM our_things.member
+                FROM member
                 join owner_rate on member.m_id = owner_rate.m_id
                 join borrower_rate on member.m_id = borrower_rate.m_id
                 WHERE m_id = :m_id
@@ -52,7 +52,7 @@ def get_profile_service(token: str):
         staff_row = db.session.execute(
             text("""
                 SELECT s_name, s_mail
-                FROM our_things.staff
+                FROM staff
                 WHERE s_id = :s_id
             """),
             {"s_id": user_id}).mappings().first()
@@ -74,7 +74,7 @@ def get_my_items(token: str):
         items_row = db.session.execute(
             text("""
                 SELECT i_id, i_name, status, description, out_duration, c_id
-                FROM our_things.item
+                FROM item
                 WHERE m_id = :m_id
             """),
             {"m_id": user_id}).mappings().all()
@@ -92,8 +92,8 @@ def find_items(r_id: int):
     items_row = db.session.execute(
         text("""
             SELECT i_name
-            FROM our_things.reservation_detail
-            join our_things.item on reservation_detail.i_id = item.i_id
+            FROM reservation_detail
+            join item on reservation_detail.i_id = item.i_id
             WHERE reservation_detail.r_id = :r_id
         """),
         {"r_id": r_id}).mappings().all()
@@ -116,7 +116,7 @@ def get_my_reservations(token: str):
         reservations_row = db.session.execute(
             text("""
                 SELECT r_id, create_at
-                FROM our_things.reservation
+                FROM reservation
                 WHERE m_id = :m_id
                 and is_deleted = false
                 order by create_at desc
@@ -145,10 +145,10 @@ def get_reservation_detail(token: str, r_id: int):
         reservation_detail_row = db.session.execute(
             text("""
                 SELECT est_start_at, est_due_at, i_name, p_name
-                FROM our_things.reservation_detail
-                join our_things.item on reservation_detail.i_id = item.i_id
-                join our_things.reservation on reservation_detail.r_id = reservation.r_id
-                join our_things.pick_up_place on reservation_detail.p_id = pick_up_place.p_id
+                FROM reservation_detail
+                join item on reservation_detail.i_id = item.i_id
+                join reservation on reservation_detail.r_id = reservation.r_id
+                join pick_up_place on reservation_detail.p_id = pick_up_place.p_id
                 WHERE r_id = :r_id and reservation.m_id = :m_id
                 and reservation.is_deleted = false
                 order by est_start_at asc
@@ -186,18 +186,18 @@ def get_reviewable_items(token: str):
                         ELSE borrower.m_name 
                     END AS object_name,
                     l.actual_return_at
-                FROM our_things.loan l
-                JOIN our_things.reservation_detail rd ON l.rd_id = rd.rd_id
-                JOIN our_things.reservation r ON rd.r_id = r.r_id
-                JOIN our_things.item i ON rd.i_id = i.i_id
-                JOIN our_things.member borrower ON r.m_id = borrower.m_id
-                JOIN our_things.member owner ON i.m_id = owner.m_id
+                FROM loan l
+                JOIN reservation_detail rd ON l.rd_id = rd.rd_id
+                JOIN reservation r ON rd.r_id = r.r_id
+                JOIN item i ON rd.i_id = i.i_id
+                JOIN member borrower ON r.m_id = borrower.m_id
+                JOIN member owner ON i.m_id = owner.m_id
                 WHERE 
                     l.actual_return_at IS NOT NULL
                     AND (r.m_id = :m_id OR i.m_id = :m_id)
                     AND NOT EXISTS (
                         SELECT 1 
-                        FROM our_things.review rv 
+                        FROM review rv 
                         WHERE rv.l_id = l.l_id 
                         AND rv.reviewer_id = :m_id
                     )
@@ -230,10 +230,10 @@ def review_item(token: str, l_id: int, data: dict):
                 r.m_id AS borrower_id,
                 i.m_id AS owner_id,
                 l.actual_return_at
-            FROM our_things.loan l
-            JOIN our_things.reservation_detail rd ON l.rd_id = rd.rd_id
-            JOIN our_things.reservation r ON rd.r_id = r.r_id
-            JOIN our_things.item i ON rd.i_id = i.i_id
+            FROM loan l
+            JOIN reservation_detail rd ON l.rd_id = rd.rd_id
+            JOIN reservation r ON rd.r_id = r.r_id
+            JOIN item i ON rd.i_id = i.i_id
             WHERE l.l_id = :l_id
         """),
         {"l_id": l_id}
@@ -258,7 +258,7 @@ def review_item(token: str, l_id: int, data: dict):
         # 3. 檢查是否已經評論過 (防止重複評論)
         existing_review = db.session.execute(
             text("""
-                SELECT 1 FROM our_things.review 
+                SELECT 1 FROM review 
                 WHERE l_id = :l_id AND reviewer_id = :reviewer_id
             """),
             {"l_id": l_id, "reviewer_id": user_id}
@@ -301,16 +301,17 @@ def get_contributions_and_bans(token: str):
         contributions_row = db.session.execute(
             text("""
                 SELECT item.i_id, item.i_name, contribution.is_active, category.c_id, category.c_name
-                FROM our_things.contribution
-                join our_things.item on contribution.i_id = item.i_id
-                join our_things.category on item.c_id = category.c_id
+                FROM contribution
+                join item on contribution.i_id = item.i_id
+                join category on item.c_id = category.c_id
                 WHERE contribution.m_id = :m_id
             """),
             {"m_id": user_id}).mappings().all()
         bans_row = db.session.execute(
             text("""
-                SELECT c_id, c_name
-                FROM our_things.category_ban
+                SELECT category_ban.c_id, category.c_name
+                FROM category_ban
+                join category on category_ban.c_id = category.c_id
                 WHERE m_id = :m_id
             """),
             {"m_id": user_id}).mappings().all()

@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物品借用系統</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .card {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .btn-action {
+            margin: 5px;
+        }
+        .status-badge {
+            font-size: 0.85em;
+        }
+        .item-card {
+            transition: transform 0.2s;
+        }
+        .item-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 導航欄 -->
+        <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="#" @click="goToHome">
+                    <i class="bi bi-box-seam"></i> 物品借用系統
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav ms-auto" v-if="isLoggedIn">
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" @click="currentView = 'home'">
+                                <i class="bi bi-house"></i> 首頁
+                            </a>
+                        </li>
+                        <li class="nav-item" v-if="userRole === 'member'">
+                            <a class="nav-link" href="#" @click="currentView = 'myItems'">
+                                <i class="bi bi-box"></i> 我的物品
+                            </a>
+                        </li>
+                        <li class="nav-item" v-if="userRole === 'member'">
+                            <a class="nav-link" href="#" @click="currentView = 'browseItems'">
+                                <i class="bi bi-search"></i> 瀏覽物品
+                            </a>
+                        </li>
+                        <li class="nav-item" v-if="userRole === 'member'">
+                            <a class="nav-link" href="#" @click="currentView = 'myRecords'">
+                                <i class="bi bi-list-ul"></i> 個人紀錄
+                            </a>
+                        </li>
+                        <li class="nav-item" v-if="userRole === 'staff'">
+                            <a class="nav-link" href="#" @click="currentView = 'staffVerification'">
+                                <i class="bi bi-check-circle"></i> 審核物品
+                            </a>
+                        </li>
+                        <li class="nav-item" v-if="userRole === 'staff'">
+                            <a class="nav-link" href="#" @click="currentView = 'staffReports'">
+                                <i class="bi bi-flag"></i> 處理檢舉
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" @click="showProfile">
+                                <i class="bi bi-person"></i> {{ userName }}
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" @click="logout">
+                                <i class="bi bi-box-arrow-right"></i> 登出
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+
+        <!-- 主要內容區域 -->
+        <div class="container mt-4">
+            <!-- 未登入時顯示登入/註冊頁面 -->
+            <div v-if="!isLoggedIn">
+                <div class="row justify-content-center">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <ul class="nav nav-tabs card-header-tabs">
+                                    <li class="nav-item">
+                                        <a class="nav-link" :class="{active: showLogin}" @click="showLogin = true" href="#">登入</a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link" :class="{active: !showLogin}" @click="showLogin = false" href="#">註冊</a>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="card-body">
+                                <!-- 登入表單 -->
+                                <div v-if="showLogin">
+                                    <h5 class="card-title">登入</h5>
+                                    <form @submit.prevent="handleLogin">
+                                        <div class="mb-3">
+                                            <label class="form-label">Email</label>
+                                            <input type="email" class="form-control" v-model="loginForm.email" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">密碼</label>
+                                            <input type="password" class="form-control" v-model="loginForm.password" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">登入身份</label>
+                                            <select class="form-select" v-model="loginForm.login_as">
+                                                <option value="member">會員</option>
+                                                <option value="staff">員工</option>
+                                            </select>
+                                        </div>
+                                        <button type="submit" class="btn btn-primary w-100">登入</button>
+                                    </form>
+                                </div>
+                                <!-- 註冊表單 -->
+                                <div v-else>
+                                    <h5 class="card-title">註冊</h5>
+                                    <form @submit.prevent="handleRegister">
+                                        <div class="mb-3">
+                                            <label class="form-label">姓名</label>
+                                            <input type="text" class="form-control" v-model="registerForm.name" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Email (必須是 @ntu.edu.tw)</label>
+                                            <input type="email" class="form-control" v-model="registerForm.email" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">密碼</label>
+                                            <input type="password" class="form-control" v-model="registerForm.password" required>
+                                        </div>
+                                        <button type="submit" class="btn btn-success w-100">註冊</button>
+                                    </form>
+                                </div>
+                                <div v-if="errorMessage" class="alert alert-danger mt-3">
+                                    {{ errorMessage }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 已登入後顯示的內容 -->
+            <div v-else>
+                <!-- 首頁 -->
+                <div v-if="currentView === 'home'">
+                    <h2>歡迎，{{ userName }}！</h2>
+                    <div class="row">
+                        <div class="col-md-4" v-if="userRole === 'member'">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <i class="bi bi-box fs-1 text-primary"></i>
+                                    <h5 class="card-title mt-3">我的物品</h5>
+                                    <p class="card-text">管理您上架的物品</p>
+                                    <button class="btn btn-primary" @click="currentView = 'myItems'">前往</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4" v-if="userRole === 'member'">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <i class="bi bi-search fs-1 text-success"></i>
+                                    <h5 class="card-title mt-3">瀏覽物品</h5>
+                                    <p class="card-text">尋找並預約物品</p>
+                                    <button class="btn btn-success" @click="currentView = 'browseItems'">前往</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4" v-if="userRole === 'member'">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <i class="bi bi-list-ul fs-1 text-info"></i>
+                                    <h5 class="card-title mt-3">個人紀錄</h5>
+                                    <p class="card-text">查看預約和評論</p>
+                                    <button class="btn btn-info" @click="currentView = 'myRecords'">前往</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4" v-if="userRole === 'staff'">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <i class="bi bi-check-circle fs-1 text-warning"></i>
+                                    <h5 class="card-title mt-3">審核物品</h5>
+                                    <p class="card-text">處理物品驗證</p>
+                                    <button class="btn btn-warning" @click="currentView = 'staffVerification'">前往</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4" v-if="userRole === 'staff'">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <i class="bi bi-flag fs-1 text-danger"></i>
+                                    <h5 class="card-title mt-3">處理檢舉</h5>
+                                    <p class="card-text">處理檢舉案件</p>
+                                    <button class="btn btn-danger" @click="currentView = 'staffReports'">前往</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 我的物品 (Member) -->
+                <div v-if="currentView === 'myItems' && userRole === 'member'">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2>我的物品</h2>
+                        <button class="btn btn-primary" @click="showUploadModal = true">
+                            <i class="bi bi-plus-circle"></i> 上傳新物品
+                        </button>
+                    </div>
+                    <div v-if="loading" class="text-center">
+                        <div class="spinner-border" role="status"></div>
+                    </div>
+                    <div v-else class="row">
+                        <div class="col-md-6 col-lg-4" v-for="item in myItems" :key="item.i_id">
+                            <div class="card item-card">
+                                <div class="card-body">
+                                    <h5 class="card-title">{{ item.i_name }}</h5>
+                                    <p class="card-text">{{ item.description }}</p>
+                                    <p class="card-text">
+                                        <span class="badge" :class="getStatusBadgeClass(item.status)">{{ item.status }}</span>
+                                    </p>
+                                    <p class="card-text"><small class="text-muted">外借時長: {{ item.out_duration }} 天</small></p>
+                                    <div class="btn-group w-100">
+                                        <button class="btn btn-sm btn-outline-primary" @click="editItem(item)">編輯</button>
+                                        <button class="btn btn-sm btn-outline-warning" @click="verifyItem(item.i_id)" v-if="item.status === 'Not verified'">申請審核</button>
+                                        <button class="btn btn-sm btn-outline-danger" @click="removeItem(item)" v-if="item.status !== 'Not reservable'">下架</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 瀏覽物品 (Member) -->
+                <div v-if="currentView === 'browseItems' && userRole === 'member'">
+                    <h2>瀏覽物品</h2>
+                    <div class="mb-3">
+                        <label class="form-label">選擇類別</label>
+                        <select class="form-select" v-model="selectedCategory" @change="loadCategoryItems">
+                            <option value="">全部類別</option>
+                            <option v-for="cat in categories" :key="cat.c_id" :value="cat.c_id">{{ cat.c_name }}</option>
+                        </select>
+                    </div>
+                    <div v-if="loading" class="text-center">
+                        <div class="spinner-border" role="status"></div>
+                    </div>
+                    <div v-else class="row">
+                        <div class="col-md-6 col-lg-4" v-for="item in browseItems" :key="item.i_id">
+                            <div class="card item-card">
+                                <div class="card-body">
+                                    <h5 class="card-title">{{ item.i_name }}</h5>
+                                    <p class="card-text">{{ item.description }}</p>
+                                    <p class="card-text">
+                                        <span class="badge" :class="getStatusBadgeClass(item.status)">{{ item.status }}</span>
+                                    </p>
+                                    <p class="card-text"><small class="text-muted">外借時長: {{ item.out_duration }} 天</small></p>
+                                    <div class="btn-group w-100">
+                                        <button class="btn btn-sm btn-primary" @click="viewItemDetail(item.i_id)">查看詳情</button>
+                                        <button class="btn btn-sm btn-success" @click="addToReservationList(item)" v-if="item.status === 'Reservable'">加入預約</button>
+                                        <button class="btn btn-sm btn-danger" @click="reportItem(item.i_id)">檢舉</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 個人紀錄 (Member) -->
+                <div v-if="currentView === 'myRecords' && userRole === 'member'">
+                    <h2>個人紀錄</h2>
+                    <ul class="nav nav-tabs">
+                        <li class="nav-item">
+                            <a class="nav-link" :class="{active: recordsTab === 'reservations'}" @click="recordsTab = 'reservations'" href="#">預約紀錄</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" :class="{active: recordsTab === 'reviews'}" @click="recordsTab = 'reviews'" href="#">評論</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" :class="{active: recordsTab === 'contributions'}" @click="recordsTab = 'contributions'" href="#">貢獻紀錄</a>
+                        </li>
+                    </ul>
+                    <div class="mt-3">
+                        <!-- 預約紀錄 -->
+                        <div v-if="recordsTab === 'reservations'">
+                            <div v-if="loading" class="text-center">
+                                <div class="spinner-border" role="status"></div>
+                            </div>
+                            <div v-else>
+                                <div class="card" v-for="reservation in myReservations" :key="reservation.r_id">
+                                    <div class="card-body">
+                                        <h5 class="card-title">預約 #{{ reservation.r_id }}</h5>
+                                        <p class="card-text">建立時間: {{ formatDate(reservation.create_at) }}</p>
+                                        <p class="card-text">物品: {{ reservation.items.join(', ') }}</p>
+                                        <button class="btn btn-sm btn-primary" @click="viewReservationDetail(reservation.r_id)">查看詳情</button>
+                                        <button class="btn btn-sm btn-danger" @click="cancelReservation(reservation.r_id)">取消預約</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 評論 -->
+                        <div v-if="recordsTab === 'reviews'">
+                            <div v-if="loading" class="text-center">
+                                <div class="spinner-border" role="status"></div>
+                            </div>
+                            <div v-else>
+                                <div class="card" v-for="item in reviewableItems" :key="item.l_id">
+                                    <div class="card-body">
+                                        <h5 class="card-title">{{ item.i_name }}</h5>
+                                        <p class="card-text">評論對象: {{ item.object_name }} ({{ item.review_target === 'owner' ? '物主' : '借用人' }})</p>
+                                        <p class="card-text">歸還時間: {{ formatDate(item.actual_return_at) }}</p>
+                                        <button class="btn btn-sm btn-primary" @click="showReviewModal(item)">撰寫評論</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 貢獻紀錄 -->
+                        <div v-if="recordsTab === 'contributions'">
+                            <div v-if="loading" class="text-center">
+                                <div class="spinner-border" role="status"></div>
+                            </div>
+                            <div v-else>
+                                <h4>我的貢獻</h4>
+                                <div class="card" v-for="contribution in contributions" :key="contribution.i_id">
+                                    <div class="card-body">
+                                        <h5 class="card-title">{{ contribution.i_name }}</h5>
+                                        <p class="card-text">類別: {{ contribution.c_name }}</p>
+                                        <span class="badge" :class="contribution.is_active ? 'bg-success' : 'bg-secondary'">
+                                            {{ contribution.is_active ? '啟用' : '停用' }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <h4 class="mt-4">被封鎖的類別</h4>
+                                <div class="card" v-for="ban in bans" :key="ban.c_id">
+                                    <div class="card-body">
+                                        <h5 class="card-title">{{ ban.c_name }}</h5>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 員工審核頁面 -->
+                <div v-if="currentView === 'staffVerification' && userRole === 'staff'">
+                    <h2>待審核物品</h2>
+                    <div v-if="loading" class="text-center">
+                        <div class="spinner-border" role="status"></div>
+                    </div>
+                    <div v-else>
+                        <div class="card" v-for="verification in verifications" :key="verification.iv_id">
+                            <div class="card-body">
+                                <h5 class="card-title">驗證 ID: {{ verification.iv_id }}</h5>
+                                <p class="card-text">物品 ID: {{ verification.i_id }}</p>
+                                <p class="card-text">建立時間: {{ formatDate(verification.create_at) }}</p>
+                                <button class="btn btn-success" @click="concludeVerification(verification.iv_id, 'Pass')">通過</button>
+                                <button class="btn btn-danger" @click="concludeVerification(verification.iv_id, 'Fail')">不通過</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 員工檢舉處理頁面 -->
+                <div v-if="currentView === 'staffReports' && userRole === 'staff'">
+                    <h2>待處理檢舉</h2>
+                    <div v-if="loading" class="text-center">
+                        <div class="spinner-border" role="status"></div>
+                    </div>
+                    <div v-else>
+                        <div class="card" v-for="report in reports" :key="report.re_id">
+                            <div class="card-body">
+                                <h5 class="card-title">檢舉 ID: {{ report.re_id }}</h5>
+                                <p class="card-text">檢舉內容: {{ report.comment }}</p>
+                                <p class="card-text">建立時間: {{ formatDate(report.create_at) }}</p>
+                                <p class="card-text">物品 ID: {{ report.i_id }}</p>
+                                <div class="btn-group">
+                                    <button class="btn btn-secondary" @click="concludeReport(report.re_id, 'Withdraw')">撤回</button>
+                                    <button class="btn btn-warning" @click="concludeReport(report.re_id, 'Ban Category')">封鎖類別</button>
+                                    <button class="btn btn-danger" @click="concludeReport(report.re_id, 'Delist')">下架</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 上傳物品 Modal -->
+        <div class="modal fade" :class="{show: showUploadModal}" :style="{display: showUploadModal ? 'block' : 'none'}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">上傳新物品</h5>
+                        <button type="button" class="btn-close" @click="showUploadModal = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form @submit.prevent="handleUploadItem">
+                            <div class="mb-3">
+                                <label class="form-label">物品名稱</label>
+                                <input type="text" class="form-control" v-model="uploadForm.i_name" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">描述</label>
+                                <textarea class="form-control" v-model="uploadForm.description" required></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">外借時長 (天)</label>
+                                <input type="number" class="form-control" v-model="uploadForm.out_duration" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">類別 ID</label>
+                                <input type="number" class="form-control" v-model="uploadForm.c_id" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">取貨地點 ID 列表 (用逗號分隔)</label>
+                                <input type="text" class="form-control" v-model="uploadForm.p_id_list_str" placeholder="例如: 1,2,3" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">上傳</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-backdrop fade" :class="{show: showUploadModal}" v-if="showUploadModal"></div>
+
+        <!-- 編輯物品 Modal -->
+        <div class="modal fade" :class="{show: showEditModal}" :style="{display: showEditModal ? 'block' : 'none'}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">編輯物品</h5>
+                        <button type="button" class="btn-close" @click="showEditModal = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form @submit.prevent="handleUpdateItem">
+                            <div class="mb-3">
+                                <label class="form-label">物品名稱</label>
+                                <input type="text" class="form-control" v-model="editForm.i_name">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">描述</label>
+                                <textarea class="form-control" v-model="editForm.description"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">外借時長 (天)</label>
+                                <input type="number" class="form-control" v-model="editForm.out_duration">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">類別 ID</label>
+                                <input type="number" class="form-control" v-model="editForm.c_id">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">取貨地點 ID 列表 (用逗號分隔)</label>
+                                <input type="text" class="form-control" v-model="editForm.p_id_list_str" placeholder="例如: 1,2,3">
+                            </div>
+                            <button type="submit" class="btn btn-primary">更新</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-backdrop fade" :class="{show: showEditModal}" v-if="showEditModal"></div>
+
+        <!-- 預約 Modal -->
+        <div class="modal fade" :class="{show: showReservationModal}" :style="{display: showReservationModal ? 'block' : 'none'}" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">建立預約</h5>
+                        <button type="button" class="btn-close" @click="showReservationModal = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div v-for="(rd, index) in reservationForm.rd_list" :key="index" class="card mb-3">
+                            <div class="card-body">
+                                <h6>物品 #{{ index + 1 }}</h6>
+                                <div class="mb-3">
+                                    <label class="form-label">物品 ID</label>
+                                    <input type="number" class="form-control" v-model="rd.i_id" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">取貨地點 ID</label>
+                                    <input type="number" class="form-control" v-model="rd.p_id" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">預計開始時間</label>
+                                    <input type="datetime-local" class="form-control" v-model="rd.est_start_at" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">預計歸還時間</label>
+                                    <input type="datetime-local" class="form-control" v-model="rd.est_due_at" required>
+                                </div>
+                                <button class="btn btn-sm btn-danger" @click="removeReservationItem(index)" v-if="reservationForm.rd_list.length > 1">移除</button>
+                            </div>
+                        </div>
+                        <button class="btn btn-secondary" @click="addReservationItem">新增物品</button>
+                        <button class="btn btn-primary" @click="handleCreateReservation">建立預約</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-backdrop fade" :class="{show: showReservationModal}" v-if="showReservationModal"></div>
+
+        <!-- 評論 Modal -->
+        <div class="modal fade" :class="{show: showReviewModalFlag}" :style="{display: showReviewModalFlag ? 'block' : 'none'}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">撰寫評論</h5>
+                        <button type="button" class="btn-close" @click="showReviewModalFlag = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form @submit.prevent="handleReview">
+                            <div class="mb-3">
+                                <label class="form-label">評分 (1-5)</label>
+                                <input type="number" class="form-control" v-model="reviewForm.score" min="1" max="5" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">評論內容</label>
+                                <textarea class="form-control" v-model="reviewForm.comment" required></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">提交</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-backdrop fade" :class="{show: showReviewModalFlag}" v-if="showReviewModalFlag"></div>
+
+        <!-- 成功/錯誤訊息提示 -->
+        <div v-if="successMessage" class="alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3" style="z-index: 9999;">
+            {{ successMessage }}
+            <button type="button" class="btn-close" @click="successMessage = ''"></button>
+        </div>
+    </div>
+
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Axios -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- 應用程式主程式 -->
+    <script src="app.js"></script>
+</body>
+</html>

@@ -20,10 +20,10 @@ def get_future_reservation_details(token: str):
 
         result = db.session.execute(text("""
             SELECT l_id, i_id, m_name, est_start_at, est_return_at
-            FROM our_things.reservation_detail
-            join our_things.loan on reservation_detail.rd_id = loan.rd_id
-            join our_things.item on reservation_detail.i_id = item.i_id
-            join our_things.member on item.m_id = member.m_id
+            FROM reservation_detail
+            join loan on reservation_detail.rd_id = loan.rd_id
+            join item on reservation_detail.i_id = item.i_id
+            join member on item.m_id = member.m_id
             WHERE m_id = :m_id and (actual_return_at is null or actual_return_at is null)
             order by est_start_at asc
         """), {"m_id": m_id}).mappings().all()
@@ -52,13 +52,13 @@ def punch_in_loan(token: str, l_id: int, data: dict):
             db.session.add(loan_event)
             if data["event_type"] == "Handover":
                 db.session.execute(text("""
-                        UPDATE our_things.loan
+                        UPDATE loan
                         SET actual_start_at = :actual_start_at
                         WHERE l_id = :l_id
                     """), {"actual_start_at": datetime.now(), "l_id": l_id})
             elif data["event_type"] == "Return":
                 db.session.execute(text("""
-                        UPDATE our_things.loan
+                        UPDATE loan
                         SET actual_return_at = :actual_return_at
                         WHERE l_id = :l_id
                     """), {"actual_return_at": datetime.now(), "l_id": l_id})

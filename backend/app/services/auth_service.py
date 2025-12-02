@@ -18,7 +18,7 @@ def login_service(email: str, password: str, login_as: str):
         member_row = db.session.execute(
             text("""
                 SELECT m_id, m_password, m_name
-                FROM our_things.member    -- 如果你在 public schema 就改成 public.user 或直接 user
+                FROM member    -- 如果你在 public schema 就改成 public.user 或直接 user
                 WHERE m_mail = :mail and is_active = true
             """),
             {"mail": email},
@@ -36,7 +36,7 @@ def login_service(email: str, password: str, login_as: str):
         staff_row = db.session.execute(
             text("""
                 SELECT s_id, s_password, s_name
-                FROM our_things.staff
+                FROM staff
                 WHERE s_mail = :mail and is_deleted = false
             """),
             {"mail": email},

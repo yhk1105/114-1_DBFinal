@@ -22,9 +22,9 @@ def create_loan_for_upcoming_reservations(hours_ahead: int = 24):
         # 找出需要建立 loan 的 rd_id
         pending_details = db.session.execute(text("""
             SELECT rd.rd_id, rd.est_start_at, rd.est_due_at
-            FROM our_things.reservation_detail rd
-            JOIN our_things.reservation r ON rd.r_id = r.r_id
-            LEFT JOIN our_things.loan l ON rd.rd_id = l.rd_id
+            FROM reservation_detail rd
+            JOIN reservation r ON rd.r_id = r.r_id
+            LEFT JOIN loan l ON rd.rd_id = l.rd_id
             WHERE r.is_deleted = false
             AND l.l_id IS NULL
             AND rd.est_start_at <= :target_time
@@ -51,7 +51,7 @@ def create_loan_for_upcoming_reservations(hours_ahead: int = 24):
 
         if values:
             db.session.execute(text("""
-                INSERT INTO our_things.loan (rd_id, actual_start_at, actual_return_at, is_deleted)
+                INSERT INTO loan (rd_id, actual_start_at, actual_return_at, is_deleted)
                 VALUES (:rd_id, :actual_start_at, :actual_return_at, :is_deleted)
             """), values)
 

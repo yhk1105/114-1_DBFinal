@@ -16,8 +16,8 @@ def check_item_available(session, i_id: int, p_id: int, est_start_at: datetime, 
 
     conflict_count = session.execute(text("""
         SELECT COUNT(*)
-        FROM our_things.reservation_detail rd
-        JOIN our_things.reservation r ON rd.r_id = r.r_id
+        FROM reservation_detail rd
+        JOIN reservation r ON rd.r_id = r.r_id
         WHERE rd.i_id = :i_id
         AND r.is_deleted = false
         AND (
@@ -33,7 +33,7 @@ def check_item_available(session, i_id: int, p_id: int, est_start_at: datetime, 
         return False
     pid_check = db.session.execute(text("""
         SELECT COUNT(*)
-        FROM our_things.item i
+        FROM item i
         join item_pick ip on i.i_id = ip.i_id
         WHERE ip.p_id = :p_id
         AND i.i_id = :i_id
@@ -78,15 +78,15 @@ def create_reservation(token: str, data: dict):
                     return False, f"Item {rd['i_id']} is not available during selected time"
                 cat = db.session.execute(text("""
                     SELECT item.c_id, category.c_name
-                    FROM our_things.item
-                    join our_things.category on item.c_id = category.c_id
+                    FROM item
+                    join category on item.c_id = category.c_id
                     WHERE i_id = :i_id
                 """), {
                     "i_id": rd["i_id"]
                 }).mappings().first()
                 check_ban = db.session.execute(text("""
                     SELECT COUNT(*)
-                    FROM our_things.category_ban
+                    FROM category_ban
                     WHERE c_id = :c_id and m_id = :m_id and is_deleted = false
                 """), {
                     "c_id": cat["c_id"],
@@ -102,21 +102,21 @@ def create_reservation(token: str, data: dict):
                 # 檢查用戶在該 root category 及其所有子類別下是否有 active contribution
                 check_contribution = db.session.execute(text("""
                     SELECT contribution.i_id
-                    FROM our_things.contribution
-                    JOIN our_things.item ON contribution.i_id = item.i_id
+                    FROM contribution
+                    JOIN item ON contribution.i_id = item.i_id
                     WHERE contribution.m_id = :m_id 
                     AND contribution.is_active = true
                     AND item.c_id IN (
                         -- 找到 root category 下的所有子類別（包括 root 自己）
                         WITH RECURSIVE category_tree AS (
                             -- 起始點：root category
-                            SELECT c_id FROM our_things.category WHERE c_id = :root_c_id
+                            SELECT c_id FROM category WHERE c_id = :root_c_id
                             
                             UNION ALL
                             
                             -- 遞迴向下查找所有子類別
                             SELECT c.c_id 
-                            FROM our_things.category c
+                            FROM category c
                             JOIN category_tree ct ON c.parent_c_id = ct.c_id
                         )
                         SELECT c_id FROM category_tree
@@ -130,7 +130,7 @@ def create_reservation(token: str, data: dict):
                 if len(check_contribution) > 0:
                     # 如果找到 contribution，確保它是 active 的
                     db.session.execute(text("""
-                        UPDATE our_things.contribution
+                        UPDATE contribution
                         SET is_active = true
                         WHERE i_id = :i_id AND m_id = :m_id
                     """), {
@@ -170,7 +170,7 @@ def delete_reservation(token: str, r_id: int):
                 text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
             check_time = db.session.execute(text("""
                 SELECT est_start_at, est_due_at
-                FROM our_things.reservation_detail
+                FROM reservation_detail
                 WHERE r_id = :r_id
             """), {
                 "r_id": r_id,
@@ -181,8 +181,8 @@ def delete_reservation(token: str, r_id: int):
                     return False, "You can only cancel the reservation within 24 hours before the start time"
             rds = db.session.execute(text("""
                 SELECT rd_id, i_id, c_id
-                FROM our_things.reservation_detail
-                join our_things.item on reservation_detail.i_id = item.i_id
+                FROM reservation_detail
+                join item on reservation_detail.i_id = item.i_id
                 WHERE r_id = :r_id
             """), {
                 "r_id": r_id,
@@ -194,21 +194,21 @@ def delete_reservation(token: str, r_id: int):
                 # 在該 root category 及其所有子類別下找一個 inactive 的 contribution
                 inactive_contribution = db.session.execute(text("""
                     SELECT contribution.i_id
-                    FROM our_things.contribution
-                    JOIN our_things.item ON contribution.i_id = item.i_id
+                    FROM contribution
+                    JOIN item ON contribution.i_id = item.i_id
                     WHERE contribution.m_id = :m_id
                     AND contribution.is_active = false
                     AND item.c_id IN (
                         -- 找到 root category 下的所有子類別（包括 root 自己）
                         WITH RECURSIVE category_tree AS (
                             -- 起始點：root category
-                            SELECT c_id FROM our_things.category WHERE c_id = :root_c_id
+                            SELECT c_id FROM category WHERE c_id = :root_c_id
                             
                             UNION ALL
                             
                             -- 遞迴向下查找所有子類別
                             SELECT c.c_id 
-                            FROM our_things.category c
+                            FROM category c
                             JOIN category_tree ct ON c.parent_c_id = ct.c_id
                         )
                         SELECT c_id FROM category_tree
@@ -222,7 +222,7 @@ def delete_reservation(token: str, r_id: int):
                 # 如果找到 inactive 的 contribution，將它設為 active
                 if inactive_contribution:
                     db.session.execute(text("""
-                        UPDATE our_things.contribution
+                        UPDATE contribution
                         SET is_active = true
                         WHERE i_id = :i_id AND m_id = :m_id
                     """), {
@@ -230,14 +230,14 @@ def delete_reservation(token: str, r_id: int):
                         "m_id": m_id,
                     })
             db.session.execute(text("""
-                UPDATE our_things.reservation_detail
+                UPDATE reservation_detail
                 SET is_deleted = true
                 WHERE r_id = :r_id
             """), {
                 "r_id": r_id,
             })
             db.session.execute(text("""
-                UPDATE our_things.reservation
+                UPDATE reservation
                 SET is_deleted = true
                 WHERE r_id = :r_id
             """), {

@@ -1,3 +1,8 @@
+-- 建立 schema
+CREATE SCHEMA IF NOT EXISTS our_things;
+SET search_path TO our_things;
+
+-- 建立資料表
 CREATE TABLE member (
     m_id BIGSERIAL PRIMARY KEY,
     m_name VARCHAR(20) NOT NULL UNIQUE,

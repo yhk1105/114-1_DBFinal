@@ -21,7 +21,7 @@ def get_this_staff(token: str):
         staff_row = db.session.execute(
             text("""
                 SELECT s_id, s_name, s_mail, role, is_deleted
-                FROM our_things.staff
+                FROM staff
                 WHERE s_id = :user_id
             """),
             {"user_id": user_id}
@@ -45,7 +45,7 @@ def get_not_deal_reports(token: str):
         report_row = db.session.execute(
             text("""
                 SELECT re_id, comment, create_at, conclude_at, m_id, i_id
-                FROM our_things.report
+                FROM report
                 WHERE s_id = :user_id and r_conclusion is null
             """),
             {"user_id": s_id}
@@ -69,8 +69,8 @@ def conclude_report(token: str, re_id: int, data: dict):
         # 使用 FOR UPDATE 鎖定 report 和 item，避免並發問題 (如重複結案、物品狀態同時被修改)
         report_row = db.session.execute(text("""
             SELECT r.i_id, i.c_id, r.m_id, i.i_name
-            FROM our_things.report r
-            JOIN our_things.item i ON r.i_id = i.i_id
+            FROM report r
+            JOIN item i ON r.i_id = i.i_id
             WHERE re_id = :re_id
             FOR UPDATE OF r, i
         """), {"re_id": re_id}).mappings().first()
@@ -80,7 +80,7 @@ def conclude_report(token: str, re_id: int, data: dict):
 
         # 2. 更新檢舉結案狀態
         db.session.execute(text("""
-            UPDATE our_things.report
+            UPDATE report
             SET r_conclusion = :r_conclusion, conclude_at = :conclude_at
             WHERE re_id = :re_id
         """),
@@ -93,9 +93,9 @@ def conclude_report(token: str, re_id: int, data: dict):
         # 3. 處理 Ban Category
         if data["r_conclusion"] == "Ban Category":
             db.session.execute(
-                text("""LOCK TABLE our_things.category_ban IN EXCLUSIVE MODE"""))
+                text("""LOCK TABLE category_ban IN EXCLUSIVE MODE"""))
             db.session.execute(text("""
-                INSERT INTO our_things.category_ban (s_id, c_id, m_id, ban_at)
+                INSERT INTO category_ban (s_id, c_id, m_id, ban_at)
                 VALUES (:s_id, :c_id, :m_id, :ban_at)
                 ON CONFLICT (s_id, c_id, m_id) DO NOTHING
             """),
@@ -105,27 +105,27 @@ def conclude_report(token: str, re_id: int, data: dict):
         if data["r_conclusion"] in ["Delist", "Ban Category"]:
             # A. 更新商品狀態
             db.session.execute(text("""
-                UPDATE our_things.item
+                UPDATE item
                 SET status = 'Not reservable'
                 WHERE i_id = :i_id
             """), {"i_id": target_i_id})
 
             # B. 【新增】同步將 Contribution 設為無效
             # 如果物品被下架，它就不該再算作有效的 Contribution
-            change_contribution(target_m_id, target_i_id)
+            change_contribution(db.session, target_m_id, target_i_id)
 
             # C. 【新增】清理尚未取貨的預約 (Pending Reservations)
             # 找出該使用者在該類別下，且尚未產生 Loan (未取貨) 的預約
             deleted_reservations = db.session.execute(text("""
-                UPDATE our_things.reservation
+                UPDATE reservation
                 SET is_deleted = true
                 WHERE m_id = :m_id 
                 AND r_id IN (
                     SELECT r.r_id
-                    FROM our_things.reservation r
-                    JOIN our_things.reservation_detail rd ON r.r_id = rd.r_id
-                    JOIN our_things.item i ON rd.i_id = i.i_id
-                    LEFT JOIN our_things.loan l ON rd.rd_id = l.rd_id
+                    FROM reservation r
+                    JOIN reservation_detail rd ON r.r_id = rd.r_id
+                    JOIN item i ON rd.i_id = i.i_id
+                    LEFT JOIN loan l ON rd.rd_id = l.rd_id
                     WHERE r.m_id = :m_id 
                     AND i.c_id = :c_id
                     AND l.l_id IS NULL -- 沒有 Loan 代表還沒取貨
@@ -137,11 +137,11 @@ def conclude_report(token: str, re_id: int, data: dict):
         # 5. 檢查是否有正在進行中的借用 (Active Loans) 以便回傳警示
         active_loans = db.session.execute(text("""
             SELECT l.l_id, i.i_name
-            FROM our_things.loan l
-            JOIN our_things.reservation_detail rd ON l.rd_id = rd.rd_id
-            JOIN our_things.reservation r ON rd.r_id = r.r_id
-            JOIN our_things.item i ON rd.i_id = i.i_id
-            LEFT JOIN our_things.loan_event le_return ON l.l_id = le_return.l_id AND le_return.event_type = 'Return'
+            FROM loan l
+            JOIN reservation_detail rd ON l.rd_id = rd.rd_id
+            JOIN reservation r ON rd.r_id = r.r_id
+            JOIN item i ON rd.i_id = i.i_id
+            LEFT JOIN loan_event le_return ON l.l_id = le_return.l_id AND le_return.event_type = 'Return'
             WHERE r.m_id = :m_id 
             AND i.c_id = :c_id
             AND le_return.timestamp IS NULL -- 沒有歸還紀錄
@@ -173,7 +173,7 @@ def get_not_deal_verification(token: str):
     if active_role == "staff":
         verification_row = db.session.execute(text("""
             SELECT iv_id, i_id, v_conclusion, create_at
-            FROM our_things.item_verification
+            FROM item_verification
             WHERE s_id = :s_id and v_conclusion = 'Pending'
         """),
         {"s_id": s_id}
@@ -198,7 +198,7 @@ def conclude_verification(token: str, iv_id: int, data: dict):
             )
             session.begin()
             session.execute(text("""
-                UPDATE our_things.item_verification
+                UPDATE item_verification
                 SET v_conclusion = :v_conclusion, conclude_at = :conclude_at
                 WHERE iv_id = :iv_id
             """),
@@ -206,9 +206,9 @@ def conclude_verification(token: str, iv_id: int, data: dict):
             ).mappings().first()
             result = session.execute(text("""
                     SELECT m_id, item.i_id 
-                    FROM our_things.item_verification
-                    join our_things.item on our_things.item_verification.i_id = our_things.item.i_id
-                    where our_things.item_verification.iv_id = :iv_id
+                    FROM item_verification
+                    join item on item_verification.i_id = item.i_id
+                    where item_verification.iv_id = :iv_id
                 """),
                 {"iv_id": iv_id}
                 ).mappings().first()
@@ -217,7 +217,7 @@ def conclude_verification(token: str, iv_id: int, data: dict):
                 return False, {"message": "Item verification not found"}
             if data["v_conclusion"] == "Pass":
                 session.execute(text("""
-                update our_things.contribution
+                update contribution
                 set is_active = true
                 where m_id = :m_id and i_id = :i_id
                 """),
@@ -225,14 +225,14 @@ def conclude_verification(token: str, iv_id: int, data: dict):
                 )
             elif data["v_conclusion"] == "Fail":
                 check_have_contribution = session.execute(text("""
-                    SELECT COUNT(*) FROM our_things.contribution
+                    SELECT COUNT(*) FROM contribution
                     WHERE m_id = :m_id and i_id = :i_id
                 """),
                 {"m_id": result["m_id"], "i_id": result["i_id"]}
                 ).scalar()
                 if check_have_contribution != 0:
                     session.execute(text("""
-                        UPDATE our_things.contribution
+                        UPDATE contribution
                         SET is_active = false
                         WHERE m_id = :m_id and i_id = :i_id
                     """),

@@ -19,7 +19,7 @@ def pick_a_staff():
     """
     staff_row = db.session.execute(
         text("""
-            SELECT s_id FROM our_things.staff
+            SELECT s_id FROM staff
             WHERE role = 'Employee' and is_deleted = false
         """)).mappings().all()
     random_staff = random.choice(staff_row)
@@ -37,7 +37,7 @@ def get_item_detail(i_id: int):
     item_row = db.session.execute(
         text("""
             SELECT i_name, status, description, out_duration, c_id
-            FROM our_things.item
+            FROM item
             WHERE i_id = :i_id
         """),
         {"i_id": i_id}).mappings().first()
@@ -56,7 +56,7 @@ def get_category_items(c_id: int):
     items_row = db.session.execute(
         text("""
             SELECT i_id, i_name, status, description, out_duration, c_id
-            FROM our_things.item
+            FROM item
             WHERE c_id = :c_id
         """),
         {"c_id": c_id}).mappings().all()
@@ -76,7 +76,7 @@ def get_item_borrowed_time(i_id: int):
     borrowed_time_row = db.session.execute(
         text("""
             SELECT est_start_at, est_due_at
-            FROM our_things.reservation_detail
+            FROM reservation_detail
             WHERE i_id = :i_id and (est_start_at >= :today or est_due_at >= :today)"""
              ),
         {"i_id": i_id, "today": today}).mappings().all()
@@ -141,7 +141,7 @@ def update_item(token: str, i_id: int, data: dict):
 
                 check_owner = db.session.execute(
                     text("""
-                        SELECT m_id FROM our_things.item
+                        SELECT m_id FROM item
                         WHERE i_id = :i_id and m_id = :user_id
                     """),  # 移除了 FOR UPDATE
                     {"i_id": i_id, "user_id": user_id}).mappings().first()
@@ -152,8 +152,8 @@ def update_item(token: str, i_id: int, data: dict):
 
                 item_original = db.session.execute(
                     text("""
-                            SELECT i_id, i_name, status, description, out_duration, c_id, is_active FROM our_things.item
-                            join our_things.contribution on item.i_id = contribution.i_id
+                            SELECT i_id, i_name, status, description, out_duration, c_id, is_active FROM item
+                            join contribution on item.i_id = contribution.i_id
                             WHERE item.i_id = :i_id and item.m_id = :user_id
                         """),
                     {"i_id": i_id, "user_id": user_id}).mappings().first()
@@ -163,7 +163,7 @@ def update_item(token: str, i_id: int, data: dict):
                 if data.get("i_name"):  # update name
                     db.session.execute(
                         text("""
-                            UPDATE our_things.item
+                            UPDATE item
                             SET i_name = :i_name
                             WHERE i_id = :i_id and m_id = :user_id
                             
@@ -184,14 +184,14 @@ def update_item(token: str, i_id: int, data: dict):
                     elif data["status"] == "Reservable":  # 他要重新上架的話需要重新認證
                         db.session.execute(
                             text("""
-                                UPDATE our_things.contribution
+                                UPDATE contribution
                                 SET is_active = False
                                 WHERE i_id = :i_id
                             """),
                             {"i_id": i_id})
                         db.session.execute(
                             text("""
-                                UPDATE our_things.item
+                                UPDATE item
                                 SET status = :status
                                 WHERE i_id = :i_id and m_id = :user_id
                             """),
@@ -199,7 +199,7 @@ def update_item(token: str, i_id: int, data: dict):
                 if data.get("description"):  # update description
                     db.session.execute(
                         text("""
-                            UPDATE our_things.item
+                            UPDATE item
                             SET description = :description
                             WHERE i_id = :i_id and m_id = :user_id
                         """),
@@ -207,7 +207,7 @@ def update_item(token: str, i_id: int, data: dict):
                 if data.get("out_duration"):  # update out_duration
                     db.session.execute(
                         text("""
-                            UPDATE our_things.item
+                            UPDATE item
                             SET out_duration = :out_duration
                             WHERE i_id = :i_id and m_id = :user_id
                         """),
@@ -220,7 +220,7 @@ def update_item(token: str, i_id: int, data: dict):
                         return False, "Cannot change contribution"
                     db.session.execute(
                         text("""
-                            UPDATE our_things.item
+                            UPDATE item
                             SET c_id = :c_id
                             WHERE i_id = :i_id and m_id = :user_id
                         """),
@@ -229,7 +229,7 @@ def update_item(token: str, i_id: int, data: dict):
                     # 取得目前資料庫中該 item 的所有 pick records
                     existing_picks = db.session.execute(
                         text("""
-                            SELECT p_id, is_active FROM our_things.item_pick
+                            SELECT p_id, is_active FROM item_pick
                             WHERE i_id = :i_id
                         """),
                         {"i_id": i_id}).mappings().all()
@@ -244,7 +244,7 @@ def update_item(token: str, i_id: int, data: dict):
                             if not existing_p_ids[p_id]["is_active"]:
                                 db.session.execute(
                                     text("""
-                                        UPDATE our_things.item_pick
+                                        UPDATE item_pick
                                         SET is_active = True
                                         WHERE i_id = :i_id and p_id = :p_id
                                     """),
@@ -260,7 +260,7 @@ def update_item(token: str, i_id: int, data: dict):
                         if p_id not in new_p_id_list:
                             db.session.execute(
                                 text("""
-                                    UPDATE our_things.item_pick
+                                    UPDATE item_pick
                                     SET is_active = False
                                     WHERE i_id = :i_id and p_id = :p_id
                                 """),
@@ -268,7 +268,7 @@ def update_item(token: str, i_id: int, data: dict):
                 item_row = db.session.execute(
                     text("""
                         SELECT i_id, i_name, status, description, out_duration, c_id
-                        FROM our_things.item
+                        FROM item
                         WHERE i_id = :i_id and m_id = :user_id
                     """),
                     {"i_id": i_id, "user_id": user_id}).mappings().first()
@@ -330,7 +330,7 @@ def verify_item(token: str, i_id: int):
     if active_role == "member":
         check_user = db.session.execute(
             text("""
-                SELECT m_id FROM our_things.item
+                SELECT m_id FROM item
                 WHERE i_id = :i_id and m_id = :user_id
             """),
             {"i_id": i_id, "user_id": user_id}).mappings().first()

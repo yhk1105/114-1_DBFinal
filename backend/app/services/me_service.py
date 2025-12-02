@@ -177,7 +177,7 @@ def get_reviewable_items(token: str):
                 CASE 
                         WHEN r.m_id = :m_id THEN "owner" 
                         ELSE "borrower" 
-                    END AS review_target
+                    END AS review_target,
                     l.l_id,
                     i.i_id,
                     i.i_name,

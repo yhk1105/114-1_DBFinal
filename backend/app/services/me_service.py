@@ -80,7 +80,25 @@ def get_my_items(token: str):
     else:
         return False, "Only members can get items"
 
+def find_items(r_id: int):
+    """
+    處理取得預約物品請求。
 
+    接收預約 ID，
+    取得預約物品後回傳。
+    """
+    items_row = db.session.execute(
+        text("""
+            SELECT i_name
+            FROM our_things.reservation_detail
+            join our_things.item on reservation_detail.i_id = item.i_id
+            WHERE reservation_detail.r_id = :r_id
+        """),
+        {"r_id": r_id}).mappings().all()
+    item_list = []
+    for item in items_row:
+        item_list.append(item["i_name"])
+    return item_list
 def get_my_reservations(token: str):
     """
     處理取得使用者預約請求。
@@ -95,13 +113,16 @@ def get_my_reservations(token: str):
     if active_role == "member":
         reservations_row = db.session.execute(
             text("""
-                SELECT r_id, r_status, r_created_at
+                SELECT r_id, created_at
                 FROM our_things.reservation
                 WHERE m_id = :m_id
                 and is_deleted = false
                 order by r_created_at desc
             """),
             {"m_id": user_id}).mappings().all()
+        for reservation in reservations_row:
+            reservation["items"] = find_items(reservation["r_id"])
+            
         return True, {"reservations": reservations_row}
     else:
         return False, "Only members can get reservations"

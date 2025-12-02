@@ -112,7 +112,7 @@ def upload_item(token: str, data: dict):
                 u_id=user_id, i_id=item_row.i_id, is_active=False)
             session.add(contribution_row)
             session.commit()
-            return True, {"item_id": item_row.i_id, "name": data["i_name"], "status": data["status"]}
+            return True, {"item_id": item_row.i_id, "name": data["i_name"], "status": item_row.status}
         except Exception as e:
             session.rollback()
             return False, str(e)
@@ -170,7 +170,7 @@ def update_item(token: str, i_id: int, data: dict):
                         """),
                         {"i_id": i_id, "user_id": user_id, "i_name": data["i_name"]}).mappings().first()
                 # update status
-                if data.get("status") and data["status"] != item_original["status"]:
+                if item_original.get("status") != "Not verified" and data.get("status") and data["status"] != item_original["status"]:
                     if data["status"] == "Not reservable":
                         if item_original["status"] == "Borrowed":
                             return False, "Item is borrowed"

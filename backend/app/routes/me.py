@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from app.services.me_service import get_profile_service, get_my_items, get_my_reservations, get_reservation_detail, get_reviewable_items, get_contributions_and_bans
+from app.services.me_service import get_profile_service, get_my_items, get_my_reservations, get_reservation_detail, get_reviewable_items, get_contributions_and_bans, review_item
 
 
 me_bp = Blueprint("me", __name__)
@@ -117,6 +117,23 @@ def get_my_reviewable_items():
     if not token:
         return jsonify({"error": "Unauthorized"}), 401
     ok, result = get_reviewable_items(token)
+    if not ok:
+        return jsonify({"error": result}), 401
+    return jsonify(result)
+
+@me_bp.post("/me/review_item/<int:l_id>")
+def review_this_item(l_id):
+    """
+    處理評論物品請求。
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Unauthorized: Missing or invalid token"}), 401
+    token = auth_header.split(" ")[1]  # 取出 "Bearer " 後面的 token 字串
+    if not token:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json() or {}
+    ok, result = review_item(token, l_id, data)
     if not ok:
         return jsonify({"error": result}), 401
     return jsonify(result)

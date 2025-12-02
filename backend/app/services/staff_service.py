@@ -206,9 +206,13 @@ def conclude_verification(token: str, iv_id: int, data: dict):
             {"iv_id": iv_id}
             ).mappings().first()["m_id"]
         if data["v_conclusion"] == "Pass":
-            
-            contribution_row = Contribution(m_id=m_id, i_id=i_id, is_active=True)
-            db.session.add(contribution_row)
+            db.session.execute(text("""
+            update our_things.contribution
+            set is_active = true
+            where m_id = :m_id and i_id = :i_id
+            """),
+            {"m_id": m_id, "i_id": i_id}
+            )
             db.session.commit()
         elif data["v_conclusion"] == "Fail":
             check_have_contribution = db.session.execute(text("""

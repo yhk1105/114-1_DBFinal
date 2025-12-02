@@ -41,8 +41,8 @@ def check_item_available(i_id: int, p_id: int, est_start_at: datetime, est_due_a
         "i_id": i_id,
     }).scalar()
     if pid_check > 0:
-        return False
-    return True
+        return True
+    return False
 
 
 def create_reservation(token: str, data: dict):
@@ -100,7 +100,8 @@ def create_reservation(token: str, data: dict):
                 check_contribution = db.session.execute(text("""
                     SELECT i_id
                     FROM our_things.contribution
-                    WHERE c_id = :c_id and m_id = :m_id
+                    join our_things.item on contribution.i_id = item.i_id
+                    WHERE item.c_id = :c_id and contribution.m_id = :m_id and contribution.is_active = active
                 """), {
                     "c_id": cat["c_id"],
                     "m_id": m_id,
@@ -116,7 +117,7 @@ def create_reservation(token: str, data: dict):
                     })
                 else:
                     session.rollback()
-                    return False, f"Your contribution to {cat["c_name"]}"
+                    return False, f"Your contribution to {cat['c_name']} category is not active"
                 new_reservation_detail = ReservationDetail(
                     r_id=new_reservation.r_id,
                     i_id=rd["i_id"],
@@ -128,7 +129,7 @@ def create_reservation(token: str, data: dict):
                 session.add(new_reservation_detail)
             session.add(new_reservation)
             session.commit()
-            return True, "OK"
+            return True, {"reservation_id": new_reservation.r_id}
         except Exception as e:
             session.rollback()
             return False, str(e)
@@ -142,8 +143,6 @@ def delete_reservation(token: str, r_id: int):
     if not m_id:
         return False, "Unauthorized"
     if active_role == "member":
-        return True, "OK"
-    if active_role == "member":
         session = db.session
         try:
             session.connection().execution_options(
@@ -156,7 +155,7 @@ def delete_reservation(token: str, r_id: int):
                 WHERE r_id = :r_id
             """), {
                 "r_id": r_id,
-            }).mappings().first()
+            }).mappings().all()
             for rd in check_time:
                 if rd["est_start_at"] < datetime.now() + timedelta(hours=24):
                     session.rollback()

@@ -16,7 +16,7 @@ def login_service(email: str, password: str, login_as: str):
     if login_as == "member":
         member_row = db.session.execute(
             text("""
-                SELECT m_id, m_password
+                SELECT m_id, m_password, m_name
                 FROM our_things.member    -- 如果你在 public schema 就改成 public.user 或直接 user
                 WHERE m_mail = :mail and is_active = true
             """),
@@ -30,11 +30,11 @@ def login_service(email: str, password: str, login_as: str):
 
         # 4. 產生 token
         token = generate_token(member_row["m_id"], "member")
-        return True, {"token": token, "role": "member", "id": member_row["m_id"], "name": member_row["name"]}
+        return True, {"token": token, "role": "member", "m_id": member_row["m_id"], "m_name": member_row["m_name"]}
     elif login_as == "staff":
         staff_row = db.session.execute(
             text("""
-                SELECT s_id, s_password
+                SELECT s_id, s_password, s_name
                 FROM our_things.staff
                 WHERE s_mail = :mail and is_deleted = false
             """),

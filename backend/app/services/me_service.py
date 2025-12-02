@@ -1,6 +1,8 @@
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from app.extensions import db
 from app.utils.jwt_utils import get_user
+from app.models.review import Review
 
 
 def get_profile_service(token: str):
@@ -113,11 +115,11 @@ def get_my_reservations(token: str):
     if active_role == "member":
         reservations_row = db.session.execute(
             text("""
-                SELECT r_id, created_at
+                SELECT r_id, create_at
                 FROM our_things.reservation
                 WHERE m_id = :m_id
                 and is_deleted = false
-                order by r_created_at desc
+                order by create_at desc
             """),
             {"m_id": user_id}).mappings().all()
         for reservation in reservations_row:
@@ -220,9 +222,9 @@ def review_item(token: str, l_id: int, data: dict):
 
     if active_role != "member":
         return False, "Only members can review items"
-
-    # 1. 查詢 Loan 資訊，確認使用者是否有權評論，並找出 reviewee_id
-    loan_info = db.session.execute(
+    try:
+        # 1. 查詢 Loan 資訊，確認使用者是否有權評論，並找出 reviewee_id
+        loan_info = db.session.execute(
         text("""
             SELECT 
                 r.m_id AS borrower_id,
@@ -235,60 +237,55 @@ def review_item(token: str, l_id: int, data: dict):
             WHERE l.l_id = :l_id
         """),
         {"l_id": l_id}
-    ).mappings().first()
-
-    if not loan_info:
-        return False, "Loan not found"
-
-    if not loan_info["actual_return_at"]:
-        return False, "Item has not been returned yet"
-
-    borrower_id = loan_info["borrower_id"]
-    owner_id = loan_info["owner_id"]
-
-    # 2. 判斷使用者身份並決定評論對象
-    if user_id == borrower_id:
-        reviewee_id = owner_id
-    elif user_id == owner_id:
-        reviewee_id = borrower_id
-    else:
-        return False, "You are not related to this loan"
-
-    # 3. 檢查是否已經評論過 (防止重複評論)
-    existing_review = db.session.execute(
-        text("""
-            SELECT 1 FROM our_things.review 
-            WHERE l_id = :l_id AND reviewer_id = :reviewer_id
-        """),
-        {"l_id": l_id, "reviewer_id": user_id}
-    ).first()
-
-    if existing_review:
-        return False, "You have already reviewed this loan"
-
-    try:
-        # 4. 新增評論
-        review_row = db.session.execute(
-            text("""
-                INSERT INTO our_things.review (score, comment, reviewer_id, reviewee_id, l_id)
-                VALUES (:score, :comment, :reviewer_id, :reviewee_id, :l_id)
-                RETURNING review_id, score, comment
-            """),
-            {
-                "score": data["score"],
-                "comment": data["comment"],
-                "reviewer_id": user_id,
-                "reviewee_id": reviewee_id,
-                "l_id": l_id
-            }
         ).mappings().first()
+        if not loan_info:
+            return False, "Loan not found"
+
+        if not loan_info["actual_return_at"]:
+            return False, "Item has not been returned yet"
+
+        borrower_id = loan_info["borrower_id"]
+        owner_id = loan_info["owner_id"]
+
+        # 2. 判斷使用者身份並決定評論對象
+        if user_id == borrower_id:
+            reviewee_id = owner_id
+        elif user_id == owner_id:
+            reviewee_id = borrower_id
+        else:
+            return False, "You are not related to this loan"
+
+        # 3. 檢查是否已經評論過 (防止重複評論)
+        existing_review = db.session.execute(
+            text("""
+                SELECT 1 FROM our_things.review 
+                WHERE l_id = :l_id AND reviewer_id = :reviewer_id
+            """),
+            {"l_id": l_id, "reviewer_id": user_id}
+        ).first()
+
+        if existing_review:
+            return False, "You have already reviewed this loan"
+        # 4. 新增評論
+        new_review = Review(
+            score=data["score"],
+            comment=data["comment"],
+            reviewer_id=user_id,
+            reviewee_id=reviewee_id,
+            l_id=l_id
+        )
+        db.session.add(new_review)
 
         db.session.commit()
-        return True, {"review": dict(review_row) if review_row else "Success"}
-
-    except Exception as e:
+        return True, {"review_id": new_review.review_id}
+    except IntegrityError:
         db.session.rollback()
+        # 這裡就代表 UNIQUE(l_id, reviewer_id) 被觸發 → 使用者之前已經評過
+        return False, "You have already reviewed this loan"
+    except Exception as e:
+        db. session.rollback()
         return False, str(e)
+
 
 def get_contributions_and_bans(token: str):
     """
@@ -303,9 +300,11 @@ def get_contributions_and_bans(token: str):
     if active_role == "member":
         contributions_row = db.session.execute(
             text("""
-                SELECT i_id, i_name, is_active, c_id, c_name
+                SELECT item.i_id, item.i_name, contribution.is_active, category.c_id, category.c_name
                 FROM our_things.contribution
-                WHERE m_id = :m_id
+                join our_things.item on contribution.i_id = item.i_id
+                join our_things.category on item.c_id = category.c_id
+                WHERE contribution.m_id = :m_id
             """),
             {"m_id": user_id}).mappings().all()
         bans_row = db.session.execute(

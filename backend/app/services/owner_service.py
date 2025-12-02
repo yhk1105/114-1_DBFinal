@@ -39,35 +39,33 @@ def punch_in_loan(token: str, l_id: int, data: dict):
     if not m_id:
         return False, "Unauthorized"
     if active_role == "member":
-        session = db.session
         try:
-            session.connection().execution_options(
+            db.session.connection().execution_options(
                 isolation_level="REPEATABLE READ"
             )
-            session.begin()
 
             loan_event = LoanEvent(
                 timestamp=int(datetime.now().timestamp()),
                 event_type=data["event_type"],
                 l_id=l_id
             )
-            session.add(loan_event)
+            db.session.add(loan_event)
             if data["event_type"] == "Handover":
-                session.execute(text("""
+                db.session.execute(text("""
                         UPDATE our_things.loan
                         SET actual_start_at = :actual_start_at
                         WHERE l_id = :l_id
                     """), {"actual_start_at": datetime.now(), "l_id": l_id})
             elif data["event_type"] == "Return":
-                session.execute(text("""
+                db.session.execute(text("""
                         UPDATE our_things.loan
                         SET actual_return_at = :actual_return_at
                         WHERE l_id = :l_id
                     """), {"actual_return_at": datetime.now(), "l_id": l_id})
 
-            session.commit()
+            db.session.commit()
             return True, "OK"
         except Exception as e:
-            session.rollback()
+            db.session.rollback()
             return False, str(e)
     return False, "Unauthorized"

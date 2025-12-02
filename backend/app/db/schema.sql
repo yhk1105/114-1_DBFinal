@@ -209,7 +209,7 @@ CREATE TABLE report (
 
 CREATE TABLE loan (
     l_id BIGSERIAL PRIMARY KEY,
-    rd_id BIGINT NOT NULL,
+    rd_id BIGINT NOT NULL UNIQUE,
     actual_start_at TIMESTAMP,
     actual_return_at TIMESTAMP,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
@@ -255,7 +255,9 @@ CREATE TABLE review (
     FOREIGN KEY (l_id)
         REFERENCES loan(l_id)
         ON DELETE RESTRICT
-        ON UPDATE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT uniq_review_per_loan_reviewer
+    UNIQUE (reviewer_id, l_id)
 );
 
 

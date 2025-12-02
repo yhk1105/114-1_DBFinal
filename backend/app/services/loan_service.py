@@ -11,11 +11,6 @@ def create_loan_for_upcoming_reservations(hours_ahead: int = 24):
     讓物品擁有者知道需要準備物品。
     """
     try:
-        # 1. 找出符合條件的 reservation_detail
-        # 條件：
-        #   - est_start_at 在現在 + hours_ahead 範圍內
-        #   - 還沒有對應的 loan
-        #   - 預約未被刪除
 
         target_time = datetime.now() + timedelta(hours=hours_ahead)
 

@@ -191,44 +191,58 @@ def conclude_verification(token: str, iv_id: int, data: dict):
     if not s_id:
         return False, {"message": "Unauthorized"}
     if active_role == "staff":
-        db.session.execute(text("""
-            UPDATE our_things.item_verification
-            SET v_conclusion = :v_conclusion, conclude_at = :conclude_at
-            WHERE iv_id = :iv_id
-        """),
-        {"v_conclusion": data["v_conclusion"], "conclude_at": datetime.now(), "iv_id": iv_id}
-        ).mappings().first()
-        m_id, i_id = db.session.execute(text("""
-                SELECT m_id, i_id FROM our_things.item_verification
-                join our_things.item on our_things.item_verification.i_id = our_things.item.i_id
-                where our_things.item_verification.iv_id = :iv_id
-            """),
-            {"iv_id": iv_id}
-            ).mappings().first()["m_id"]
-        if data["v_conclusion"] == "Pass":
-            db.session.execute(text("""
-            update our_things.contribution
-            set is_active = true
-            where m_id = :m_id and i_id = :i_id
-            """),
-            {"m_id": m_id, "i_id": i_id}
+        session = db.session()
+        try:
+            session.connection().execution_options(
+                isolation_level="REPEATABLE READ"
             )
-            db.session.commit()
-        elif data["v_conclusion"] == "Fail":
-            check_have_contribution = db.session.execute(text("""
-                SELECT COUNT(*) FROM our_things.contribution
-                WHERE m_id = :m_id and i_id = :i_id
+            session.begin()
+            session.execute(text("""
+                UPDATE our_things.item_verification
+                SET v_conclusion = :v_conclusion, conclude_at = :conclude_at
+                WHERE iv_id = :iv_id
             """),
-            {"m_id": m_id, "i_id": i_id}
-            ).mappings().first()["count"]
-            if check_have_contribution != 0:
-                db.session.execute(text("""
-                    UPDATE our_things.contribution
-                    SET is_active = false
+            {"v_conclusion": data["v_conclusion"], "conclude_at": datetime.now(), "iv_id": iv_id}
+            ).mappings().first()
+            result = session.execute(text("""
+                    SELECT m_id, item.i_id 
+                    FROM our_things.item_verification
+                    join our_things.item on our_things.item_verification.i_id = our_things.item.i_id
+                    where our_things.item_verification.iv_id = :iv_id
+                """),
+                {"iv_id": iv_id}
+                ).mappings().first()
+            if not result:
+                session.rollback()
+                return False, {"message": "Item verification not found"}
+            if data["v_conclusion"] == "Pass":
+                session.execute(text("""
+                update our_things.contribution
+                set is_active = true
+                where m_id = :m_id and i_id = :i_id
+                """),
+                {"m_id": result["m_id"], "i_id": result["i_id"]}
+                )
+            elif data["v_conclusion"] == "Fail":
+                check_have_contribution = session.execute(text("""
+                    SELECT COUNT(*) FROM our_things.contribution
                     WHERE m_id = :m_id and i_id = :i_id
                 """),
-                {"m_id": m_id, "i_id": i_id}
-                ).mappings().first()
+                {"m_id": result["m_id"], "i_id": result["i_id"]}
+                ).scalar()
+                if check_have_contribution != 0:
+                    session.execute(text("""
+                        UPDATE our_things.contribution
+                        SET is_active = false
+                        WHERE m_id = :m_id and i_id = :i_id
+                    """),
+                    {"m_id": result["m_id"], "i_id": result["i_id"]}
+                    )
+            session.commit()
 
-        return True, {"message": "Success"}
+            return True, {"message": "Success"}
+        except Exception as e:
+            return False, {"message": str(e)}
+        finally:
+            session.close()
     return False, {"message": "Unauthorized"}

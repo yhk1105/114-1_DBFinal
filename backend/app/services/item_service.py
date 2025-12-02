@@ -22,8 +22,8 @@ def pick_a_staff():
             SELECT s_id FROM our_things.staff
             WHERE role = 'Employee' and is_deleted = false
         """)).mappings().all()
-    random_staff_id = random.choice(staff_row)
-    return random_staff_id["s_id"]
+    random_staff = random.choice(staff_row)
+    return random_staff["s_id"]
 
 
 def get_item_detail(i_id: int):
@@ -96,27 +96,25 @@ def upload_item(token: str, data: dict):
     if not user_id:
         return False, "Unauthorized"
     if active_role == "member":
-        session = db.session
         try:
-            session.connection().execution_options(
-                isolation_level="SERIALIZABLE"
-            )
-            session.begin()
+            db.session.execute(
+                text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
+
             item_row = Item(i_name=data["i_name"], status="Not verified",
                             description=data["description"], out_duration=data["out_duration"], m_id=user_id, c_id=data["c_id"])
+            db.session.flush()
             for p_id in data["p_id_list"]:
                 item_pick_row = ItemPick(i_id=item_row.i_id, p_id=p_id)
-                session.add(item_pick_row)
-            session.add(item_row)
+                db.session.add(item_pick_row)
+
             contribution_row = Contribution(
-                u_id=user_id, i_id=item_row.i_id, is_active=False)
-            session.add(contribution_row)
-            session.commit()
+                m_id=user_id, i_id=item_row.i_id, is_active=False)
+            db.session.add(contribution_row)
+            db.session.commit()
             return True, {"item_id": item_row.i_id, "name": data["i_name"], "status": item_row.status}
         except Exception as e:
-            session.rollback()
+            db.session.rollback()
             return False, str(e)
-        return True, {"item_id": item_row.i_id, "name": data["i_name"], "status": data["status"]}
 
 
 def update_item(token: str, i_id: int, data: dict):
@@ -138,18 +136,18 @@ def update_item(token: str, i_id: int, data: dict):
                 # 1. 設定 Serializable
                 db.session.execute(
                     text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
-
                 # 2. 執行你的查詢 (拿掉 FOR UPDATE，讓 Serializable 幫你管)
                 # 注意：這裡不需要再鎖 contribution 了，Serializable 會監控讀取依賴
 
                 check_owner = db.session.execute(
                     text("""
-                        SELECT u_id FROM our_things.item
+                        SELECT m_id FROM our_things.item
                         WHERE i_id = :i_id and m_id = :user_id
                     """),  # 移除了 FOR UPDATE
                     {"i_id": i_id, "user_id": user_id}).mappings().first()
 
                 if not check_owner:
+                    db.session.rollback()
                     return False, "Item not found"
 
                 item_original = db.session.execute(
@@ -160,85 +158,97 @@ def update_item(token: str, i_id: int, data: dict):
                         """),
                     {"i_id": i_id, "user_id": user_id}).mappings().first()
                 if item_original["status"] == "Borrowed":
+                    db.session.rollback()
                     return False, "Item is borrowed, cannot be edited"
                 if data.get("i_name"):  # update name
-                    item_row = db.session.execute(
+                    db.session.execute(
                         text("""
                             UPDATE our_things.item
                             SET i_name = :i_name
                             WHERE i_id = :i_id and m_id = :user_id
+                            
                         """),
-                        {"i_id": i_id, "user_id": user_id, "i_name": data["i_name"]}).mappings().first()
+                        {"i_id": i_id, "user_id": user_id, "i_name": data["i_name"]})
                 # update status
                 if item_original.get("status") != "Not verified" and data.get("status") and data["status"] != item_original["status"]:
                     if data["status"] == "Not reservable":
                         if item_original["status"] == "Borrowed":
+                            db.session.rollback()
                             return False, "Item is borrowed"
-                        if item_original["is_active"] == False:
-                            change_contribution(user_id, i_id)
-                    elif data["status"] == "Reservable":
-                        item_row = db.session.execute(
+                        if item_original["is_active"] is False:
+                            ok = change_contribution(db.session, user_id, i_id)
+                            if not ok:
+                                db.session.rollback()
+                                return False, "Cannot change contribution"
+
+                    elif data["status"] == "Reservable":  # 他要重新上架的話需要重新認證
+                        db.session.execute(
                             text("""
                                 UPDATE our_things.contribution
-                                SET is_active = true
+                                SET is_active = False
                                 WHERE i_id = :i_id
                             """),
-                            {"i_id": i_id}).mappings().first()
-                    item_row = db.session.execute(
-                        text("""
-                            UPDATE our_things.item
-                            SET status = :status
-                            WHERE i_id = :i_id and m_id = :user_id
-                        """),
-                        {"i_id": i_id, "user_id": user_id, "status": data["status"]}).mappings().first()
+                            {"i_id": i_id})
+                        db.session.execute(
+                            text("""
+                                UPDATE our_things.item
+                                SET status = :status
+                                WHERE i_id = :i_id and m_id = :user_id
+                            """),
+                            {"i_id": i_id, "user_id": user_id, "status": "Not verified"})
                 if data.get("description"):  # update description
-                    item_row = db.session.execute(
+                    db.session.execute(
                         text("""
                             UPDATE our_things.item
                             SET description = :description
                             WHERE i_id = :i_id and m_id = :user_id
                         """),
-                        {"i_id": i_id, "user_id": user_id, "description": data["description"]}).mappings().first()
+                        {"i_id": i_id, "user_id": user_id, "description": data["description"]})
                 if data.get("out_duration"):  # update out_duration
-                    item_row = db.session.execute(
+                    db.session.execute(
                         text("""
                             UPDATE our_things.item
                             SET out_duration = :out_duration
                             WHERE i_id = :i_id and m_id = :user_id
                         """),
-                        {"i_id": i_id, "user_id": user_id, "out_duration": data["out_duration"]}).mappings().first()
+                        {"i_id": i_id, "user_id": user_id, "out_duration": data["out_duration"]})
                 if data.get("c_id"):  # update c_id
 
-                    check_category_contribution = db.session.execute(
-                        text("""
-                            SELECT COUNT(*) 
-                            FROM our_things.contribution
-                            join our_things.item on contribution.i_id = item.i_id
-                            WHERE m_id = :user_id and item.c_id = :item_original_c_id and is_active = true
-                        """),
-                        {"user_id": user_id, "item_original_c_id": item_original["c_id"]}).mappings().first()
-                    if check_category_contribution == 0:
-                        return False, "Cannot change category"
-                    item_row = db.session.execute(
+                    ok = change_contribution(db.session, user_id, i_id)
+                    if not ok:
+                        db.session.rollback()
+                        return False, "Cannot change contribution"
+                    db.session.execute(
                         text("""
                             UPDATE our_things.item
                             SET c_id = :c_id
                             WHERE i_id = :i_id and m_id = :user_id
                         """),
-                        {"i_id": i_id, "user_id": user_id, "c_id": data["c_id"]}).mappings().first()
+                        {"i_id": i_id, "user_id": user_id, "c_id": data["c_id"]})
                 if data.get("p_id_list"):
                     # 取得目前資料庫中該 item 的所有 pick records
-                    existing_picks = ItemPick.query.filter_by(i_id=i_id).all()
+                    existing_picks = db.session.execute(
+                        text("""
+                            SELECT p_id, is_active FROM our_things.item_pick
+                            WHERE i_id = :i_id
+                        """),
+                        {"i_id": i_id}).mappings().all()
                     existing_p_ids = {
-                        pick.p_id: pick for pick in existing_picks}
+                        pick["p_id"]: pick for pick in existing_picks}
                     new_p_id_list = data["p_id_list"]
 
                     # 檢查每個新的 p_id
                     for p_id in new_p_id_list:
                         if p_id in existing_p_ids:
                             # 如果本來就有，且目前是不活躍 (is_active=False)，則設為 True
-                            if not existing_p_ids[p_id].is_active:
-                                existing_p_ids[p_id].is_active = True
+                            if not existing_p_ids[p_id]["is_active"]:
+                                db.session.execute(
+                                    text("""
+                                        UPDATE our_things.item_pick
+                                        SET is_active = True
+                                        WHERE i_id = :i_id and p_id = :p_id
+                                    """),
+                                    {"i_id": i_id, "p_id": p_id})
                         else:
                             # 如果本來沒有，則新增
                             new_pick = ItemPick(
@@ -248,7 +258,13 @@ def update_item(token: str, i_id: int, data: dict):
                     # 檢查是否有被移除的 p_id (在資料庫中有，但在新清單中沒有)
                     for p_id, pick in existing_p_ids.items():
                         if p_id not in new_p_id_list:
-                            pick.is_active = False
+                            db.session.execute(
+                                text("""
+                                    UPDATE our_things.item_pick
+                                    SET is_active = False
+                                    WHERE i_id = :i_id and p_id = :p_id
+                                """),
+                                {"i_id": i_id, "p_id": p_id})
                 item_row = db.session.execute(
                     text("""
                         SELECT i_id, i_name, status, description, out_duration, c_id
@@ -290,11 +306,15 @@ def report_item(token: str, i_id: int, data: dict):
         staff_id = pick_a_staff()
         if not staff_id:
             return False, "No staff available"
-        report_row = Report(m_id=user_id, i_id=i_id,
-                            comment=data["comment"], create_at=datetime.now(), s_id=staff_id)
-        db.session.add(report_row)
-        db.session.commit()
-        return True, {"report_id": report_row.re_id}
+        try:
+            report_row = Report(m_id=user_id, i_id=i_id,
+                                comment=data["comment"], create_at=datetime.now(), s_id=staff_id)
+            db.session.add(report_row)
+            db.session.commit()
+            return True, {"report_id": report_row.re_id}
+        except Exception as e:
+            db.session.rollback()
+            return False, str(e)
 
 
 def verify_item(token: str, i_id: int):
@@ -310,7 +330,7 @@ def verify_item(token: str, i_id: int):
     if active_role == "member":
         check_user = db.session.execute(
             text("""
-                SELECT u_id FROM our_things.item
+                SELECT m_id FROM our_things.item
                 WHERE i_id = :i_id and m_id = :user_id
             """),
             {"i_id": i_id, "user_id": user_id}).mappings().first()
@@ -319,8 +339,12 @@ def verify_item(token: str, i_id: int):
         staff_id = pick_a_staff()
         if not staff_id:
             return False, "No staff available"
-        item_verification_row = ItemVerification(
-            i_id=i_id, s_id=staff_id, create_at=datetime.now(), v_conclusion="Pending")
-        db.session.add(item_verification_row)
-        db.session.commit()
-        return True, {"item_verification_id": item_verification_row.iv_id}
+        try:
+            item_verification_row = ItemVerification(
+                i_id=i_id, s_id=staff_id, create_at=datetime.now(), v_conclusion="Pending")
+            db.session.add(item_verification_row)
+            db.session.commit()
+            return True, {"item_verification_id": item_verification_row.iv_id}
+        except Exception as e:
+            db.session.rollback()
+            return False, str(e)

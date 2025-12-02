@@ -184,10 +184,11 @@ CREATE TABLE category_ban (
         ON UPDATE CASCADE
 );
 
+-- 'Withdraw'（不對該使用者懲處）,'Ban Category' （禁止他借用這個類別，同時下架該商品）,'Delist'（下架該商品就好）,'Pending'（等待員工查驗）
 CREATE TABLE report (
     re_id BIGINT PRIMARY KEY,
     comment VARCHAR(200) NOT NULL,
-    r_conclusion VARCHAR(10) CHECK(r_conclusion IN ('Withdraw','Suspend','Delist')),
+    r_conclusion VARCHAR(10) CHECK(r_conclusion IN ('Withdraw','Ban Category','Delist', 'Pending')),
     create_at TIMESTAMP NOT NULL,
     conclude_at TIMESTAMP,
     m_id BIGINT NOT NULL,

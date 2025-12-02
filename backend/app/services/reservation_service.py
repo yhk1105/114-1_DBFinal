@@ -1,7 +1,7 @@
 from app.extensions import db
 from app.models.reservation import Reservation
 from app.models.reservation_detail import ReservationDetail
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.utils.jwt_utils import get_user
 from sqlalchemy import text
 
@@ -127,6 +127,54 @@ def create_reservation(token: str, data: dict):
 
                 session.add(new_reservation_detail)
             session.add(new_reservation)
+            session.commit()
+            return True, "OK"
+        except Exception as e:
+            session.rollback()
+            return False, str(e)
+    return False, "Unauthorized"
+
+def delete_reservation(token: str, r_id: int):
+    """
+    處理刪除預約請求。
+    """
+    m_id, active_role = get_user(token)
+    if not m_id:
+        return False, "Unauthorized"
+    if active_role == "member":
+        return True, "OK"
+    if active_role == "member":
+        session = db.session
+        try:
+            session.connection().execution_options(
+                isolation_level="SERIALIZABLE"
+            )
+            session.begin()
+            check_time = session.execute(text("""
+                SELECT est_start_at, est_due_at
+                FROM our_things.reservation_detail
+                WHERE r_id = :r_id
+            """), {
+                "r_id": r_id,
+            }).mappings().first()
+            for rd in check_time:
+                if rd["est_start_at"] < datetime.now() + timedelta(hours=24):
+                    session.rollback()
+                    return False, "You can only cancel the reservation within 24 hours before the start time"
+            session.execute(text("""
+                UPDATE our_things.reservation_detail
+                SET is_deleted = true
+                WHERE r_id = :r_id
+            """), {
+                "r_id": r_id,
+            })
+            session.execute(text("""
+                UPDATE our_things.reservation
+                SET is_deleted = true
+                WHERE r_id = :r_id
+            """), {
+                "r_id": r_id,
+            })
             session.commit()
             return True, "OK"
         except Exception as e:

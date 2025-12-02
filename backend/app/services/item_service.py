@@ -5,12 +5,13 @@ from app.utils.jwt_utils import get_user
 from app.models.item import Item
 from app.models.contribution import Contribution
 from app.models.report import Report
-from sqlalchemy.exc import OperationalError # 用來抓取 Serialization Failure
+from sqlalchemy.exc import OperationalError  # 用來抓取 Serialization Failure
 import time
 import random
 from app.models.item_verification import ItemVerification
 from app.services.contribution import change_contribution
 from app.models.item_pick import ItemPick
+
 
 def pick_a_staff():
     """
@@ -23,6 +24,7 @@ def pick_a_staff():
         """)).mappings().all()
     random_staff_id = random.choice(staff_row)
     return random_staff_id["s_id"]
+
 
 def get_item_detail(i_id: int):
     """
@@ -100,13 +102,14 @@ def upload_item(token: str, data: dict):
                 isolation_level="SERIALIZABLE"
             )
             session.begin()
-            item_row = Item( i_name=data["i_name"], status="Not verified",
-                        description=data["description"], out_duration=data["out_duration"], m_id=user_id, c_id=data["c_id"])
+            item_row = Item(i_name=data["i_name"], status="Not verified",
+                            description=data["description"], out_duration=data["out_duration"], m_id=user_id, c_id=data["c_id"])
             for p_id in data["p_id_list"]:
                 item_pick_row = ItemPick(i_id=item_row.i_id, p_id=p_id)
                 session.add(item_pick_row)
             session.add(item_row)
-            contribution_row = Contribution(u_id=user_id, i_id=item_row.i_id, is_active=False)
+            contribution_row = Contribution(
+                u_id=user_id, i_id=item_row.i_id, is_active=False)
             session.add(contribution_row)
             session.commit()
             return True, {"item_id": item_row.i_id, "name": data["i_name"], "status": data["status"]}
@@ -133,18 +136,19 @@ def update_item(token: str, i_id: int, data: dict):
         for attempt in range(max_retries):
             try:
                 # 1. 設定 Serializable
-                db.session.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
-                
+                db.session.execute(
+                    text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
+
                 # 2. 執行你的查詢 (拿掉 FOR UPDATE，讓 Serializable 幫你管)
                 # 注意：這裡不需要再鎖 contribution 了，Serializable 會監控讀取依賴
-                
+
                 check_owner = db.session.execute(
                     text("""
                         SELECT u_id FROM our_things.item
                         WHERE i_id = :i_id and m_id = :user_id
-                    """), # 移除了 FOR UPDATE
+                    """),  # 移除了 FOR UPDATE
                     {"i_id": i_id, "user_id": user_id}).mappings().first()
-                
+
                 if not check_owner:
                     return False, "Item not found"
 
@@ -222,6 +226,29 @@ def update_item(token: str, i_id: int, data: dict):
                             WHERE i_id = :i_id and m_id = :user_id
                         """),
                         {"i_id": i_id, "user_id": user_id, "c_id": data["c_id"]}).mappings().first()
+                if data.get("p_id_list"):
+                    # 取得目前資料庫中該 item 的所有 pick records
+                    existing_picks = ItemPick.query.filter_by(i_id=i_id).all()
+                    existing_p_ids = {
+                        pick.p_id: pick for pick in existing_picks}
+                    new_p_id_list = data["p_id_list"]
+
+                    # 檢查每個新的 p_id
+                    for p_id in new_p_id_list:
+                        if p_id in existing_p_ids:
+                            # 如果本來就有，且目前是不活躍 (is_active=False)，則設為 True
+                            if not existing_p_ids[p_id].is_active:
+                                existing_p_ids[p_id].is_active = True
+                        else:
+                            # 如果本來沒有，則新增
+                            new_pick = ItemPick(
+                                i_id=i_id, p_id=p_id, is_active=True)
+                            db.session.add(new_pick)
+
+                    # 檢查是否有被移除的 p_id (在資料庫中有，但在新清單中沒有)
+                    for p_id, pick in existing_p_ids.items():
+                        if p_id not in new_p_id_list:
+                            pick.is_active = False
                 item_row = db.session.execute(
                     text("""
                         SELECT i_id, i_name, status, description, out_duration, c_id
@@ -238,14 +265,16 @@ def update_item(token: str, i_id: int, data: dict):
                 # 或是 Deadlock
                 if "could not serialize access" in str(e) or "deadlock detected" in str(e):
                     if attempt < max_retries - 1:
-                        time.sleep(0.1 * (attempt + 1)) # 等一下再重試 (Exponential Backoff)
+                        # 等一下再重試 (Exponential Backoff)
+                        time.sleep(0.1 * (attempt + 1))
                         continue
                     else:
                         return False, "System busy, please try again later"
-                raise e # 如果是其他錯誤，直接噴錯
+                raise e  # 如果是其他錯誤，直接噴錯
             except Exception as e:
                 db.session.rollback()
                 return False, str(e)
+
 
 def report_item(token: str, i_id: int, data: dict):
     """
@@ -261,10 +290,12 @@ def report_item(token: str, i_id: int, data: dict):
         staff_id = pick_a_staff()
         if not staff_id:
             return False, "No staff available"
-        report_row = Report( m_id=user_id, i_id=i_id, comment=data["comment"], create_at=datetime.now(),s_id = staff_id)
+        report_row = Report(m_id=user_id, i_id=i_id,
+                            comment=data["comment"], create_at=datetime.now(), s_id=staff_id)
         db.session.add(report_row)
         db.session.commit()
         return True, {"report_id": report_row.re_id}
+
 
 def verify_item(token: str, i_id: int):
     """
@@ -288,7 +319,8 @@ def verify_item(token: str, i_id: int):
         staff_id = pick_a_staff()
         if not staff_id:
             return False, "No staff available"
-        item_verification_row = ItemVerification(i_id=i_id, s_id=staff_id, create_at=datetime.now(), v_conclusion="Pending")
+        item_verification_row = ItemVerification(
+            i_id=i_id, s_id=staff_id, create_at=datetime.now(), v_conclusion="Pending")
         db.session.add(item_verification_row)
         db.session.commit()
         return True, {"item_verification_id": item_verification_row.iv_id}

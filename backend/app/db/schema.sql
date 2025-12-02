@@ -27,8 +27,8 @@ CREATE TABLE staff (
 );
 
 --先插員工編號 0 的預設員工帳號
-INSERT INTO staff (s_id, role, is_deleted)
-VALUES (0, 'Employee', FALSE)
+INSERT INTO staff (s_id, s_mail, s_password, role, is_deleted)
+VALUES (0, 'default.staff@ourthings.com', 'scrypt:32768:8:1$Kh2XAArcfrwEqo6O$823f306e62ac2e0b568a7f59644c7fba2602cdca7783c69cda1e8c7d3e7e6ec834de9d102d6f7ba91aee167ba6e7272c7a190fa13c8f600550af5aac99a46d4e', 'Employee', FALSE)
 ON CONFLICT (s_id) DO NOTHING;
 
 CREATE TABLE pick_up_place (
@@ -188,7 +188,7 @@ CREATE TABLE category_ban (
 CREATE TABLE report (
     re_id BIGINT PRIMARY KEY,
     comment VARCHAR(200) NOT NULL,
-    r_conclusion VARCHAR(10) CHECK(r_conclusion IN ('Withdraw','Ban Category','Delist', 'Pending')),
+    r_conclusion VARCHAR(20) CHECK(r_conclusion IN ('Withdraw','Ban Category','Delist', 'Pending')),
     create_at TIMESTAMP NOT NULL,
     conclude_at TIMESTAMP,
     m_id BIGINT NOT NULL,
@@ -215,7 +215,7 @@ CREATE TABLE loan (
     l_id BIGINT PRIMARY KEY,
     rd_id BIGINT NOT NULL,
     actual_start_at TIMESTAMP NOT NULL,
-    actual_due_at TIMESTAMP NOT NULL,
+    actual_return_at TIMESTAMP NOT NULL,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
 
     FOREIGN KEY (rd_id)
@@ -226,7 +226,7 @@ CREATE TABLE loan (
 
 CREATE TABLE loan_event (
     timestamp BIGINT NOT NULL,
-    event_type VARCHAR(10) NOT NULL 
+    event_type VARCHAR(15) NOT NULL 
         CHECK (event_type IN ('Handover','Extend','Mark_overdue','Return')),
     l_id BIGINT NOT NULL,
     PRIMARY KEY (timestamp, l_id),

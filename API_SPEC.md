@@ -164,7 +164,7 @@ Token 格式必須為 `Bearer <token>`，中間有一個空格。
 
 ### 2.3 取得類別的子類別
 
-**Endpoint**: `GET /item/<c_id>`
+**Endpoint**: `GET /item/category/<c_id>/subcategories`
 
 **是否需要 Token**: ❌ 否
 

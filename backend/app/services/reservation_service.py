@@ -51,7 +51,7 @@ def get_pickup_places(i_id: int):
         SELECT p_id, p_name
         FROM item_pick
         join pick_up_place on item_pick.p_id = pick_up_place.p_id
-        WHERE item_pick.i_id = :i_id and item_pick.is_deleted = false and item_pick.is_delete = true
+        WHERE item_pick.i_id = :i_id and item_pick.is_deleted = false and pick_up_place.is_deleted = false
     """), {
         "i_id": i_id,
     }).mappings().all()

@@ -3,14 +3,6 @@ from app.services.item_service import get_item_detail, get_category_items, get_i
 
 item_bp = Blueprint("item", __name__)
 
-@item_bp.get("/item/<int:c_id>")
-def get_this_subcategory_items(c_id):
-    """
-    處理取得特定類別物品請求。
-    """
-    items = get_subcategory_items(c_id)
-    return jsonify({"items": items}), 200
-
 @item_bp.get("/item/<int:i_id>")
 def get_this_item_detail(i_id):
     """
@@ -51,6 +43,15 @@ def get_this_category_items(c_id):
     if not ok:
         return jsonify({"error": result}), 401
     return jsonify(result)
+
+
+@item_bp.get("/item/category/<int:c_id>/subcategories")
+def get_this_subcategory_items(c_id):
+    """
+    處理取得特定類別的子類別請求。
+    """
+    items = get_subcategory_items(c_id)
+    return jsonify({"items": items}), 200
 
 
 @item_bp.get("/item/<int:i_id>/borrowed_time")

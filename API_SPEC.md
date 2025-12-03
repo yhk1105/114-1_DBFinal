@@ -162,7 +162,36 @@ Token 格式必須為 `Bearer <token>`，中間有一個空格。
 
 ---
 
-### 2.3 取得物品借用時間
+### 2.3 取得類別的子類別
+
+**Endpoint**: `GET /item/category/<c_id>/subcategories`
+
+**是否需要 Token**: ❌ 否
+
+**路徑參數**:
+- `c_id` (integer): 類別 ID (如果為 0，則返回所有根類別)
+
+**請求參數**: 無
+
+**成功回應** (200):
+```json
+{
+  "items": [
+    {
+      "c_id": "integer",        // 類別 ID
+      "c_name": "string"        // 類別名稱
+    }
+  ]
+}
+```
+
+**說明**:
+- 當 `c_id` 為 0 時，返回所有根類別（parent_c_id 為 NULL 的類別）
+- 當 `c_id` 不為 0 時，返回該類別的所有子類別（parent_c_id 等於該 c_id 的類別）
+
+---
+
+### 2.4 取得物品借用時間
 
 **Endpoint**: `GET /item/<i_id>/borrowed_time`
 
@@ -194,7 +223,7 @@ Token 格式必須為 `Bearer <token>`，中間有一個空格。
 
 ---
 
-### 2.4 上傳新物品
+### 2.5 上傳新物品
 
 **Endpoint**: `POST /item/upload`
 
@@ -231,7 +260,7 @@ Token 格式必須為 `Bearer <token>`，中間有一個空格。
 
 ---
 
-### 2.5 更新物品
+### 2.6 更新物品
 
 **Endpoint**: `PUT /item/<i_id>`
 
@@ -277,7 +306,7 @@ Token 格式必須為 `Bearer <token>`，中間有一個空格。
 
 ---
 
-### 2.6 檢舉物品
+### 2.7 檢舉物品
 
 **Endpoint**: `POST /item/<i_id>/report`
 
@@ -309,7 +338,7 @@ Token 格式必須為 `Bearer <token>`，中間有一個空格。
 
 ---
 
-### 2.7 驗證物品
+### 2.8 驗證物品
 
 **Endpoint**: `POST /item/<i_id>/verify`
 
@@ -636,7 +665,39 @@ Token 格式必須為 `Bearer <token>`，中間有一個空格。
 
 ## 5. 預約相關 API (Reservation)
 
-### 5.1 建立預約
+### 5.1 取得物品的取貨地點
+
+**Endpoint**: `GET /reservation/<i_id>`
+
+**是否需要 Token**: ❌ 否
+
+**路徑參數**:
+- `i_id` (integer): 物品 ID
+
+**請求參數**: 無
+
+**成功回應** (200):
+```json
+{
+  "pickup_places": [
+    {
+      "p_id": "integer",        // 取貨地點 ID
+      "p_name": "string"         // 取貨地點名稱
+    }
+  ]
+}
+```
+
+**錯誤回應** (400/401):
+```json
+{
+  "error": "string"           // 錯誤訊息
+}
+```
+
+---
+
+### 5.2 建立預約
 
 **Endpoint**: `POST /reservation/create`
 
@@ -674,7 +735,7 @@ Token 格式必須為 `Bearer <token>`，中間有一個空格。
 
 ---
 
-### 5.2 刪除預約
+### 5.3 刪除預約
 
 **Endpoint**: `DELETE /reservation/delete/<r_id>`
 

@@ -346,3 +346,26 @@ def verify_item(token: str, i_id: int):
         except Exception as e:
             db.session.rollback()
             return False, str(e)
+
+def get_subcategory_items(c_id: int):
+    """
+    處理取得特定子類別物品請求。
+    """
+    if c_id == 0:
+        items_row = db.session.execute(
+            text("""
+                SELECT c_id, c_name
+                FROM category
+                WHERE parent_c_id is NULL
+            """),
+            {"c_id": c_id}).mappings().all()
+        return items_row
+    else:
+        items_row = db.session.execute(
+            text("""
+                SELECT c_id, c_name
+                FROM category
+                WHERE parent_c_id = :c_id
+            """),
+            {"c_id": c_id}).mappings().all()
+        return items_row

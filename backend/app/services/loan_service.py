@@ -11,7 +11,7 @@ def create_loan_for_upcoming_reservations(hours_ahead: int = 24):
     讓物品擁有者知道需要準備物品。
     """
     try:
-
+        db.session.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
         target_time = datetime.now() + timedelta(hours=hours_ahead)
 
         # 使用原生 SQL 執行批量插入，效率較高

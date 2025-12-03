@@ -72,7 +72,7 @@ def conclude_report(token: str, re_id: int, data: dict):
             FROM report r
             JOIN item i ON r.i_id = i.i_id
             WHERE re_id = :re_id
-            FOR UPDATE OF r, i
+            FOR UPDATE OF r, i, contribution
         """), {"re_id": re_id}).mappings().first()
 
         if not report_row:
@@ -191,20 +191,18 @@ def conclude_verification(token: str, iv_id: int, data: dict):
     if not s_id:
         return False, {"message": "Unauthorized"}
     if active_role == "staff":
-        session = db.session()
         try:
-            session.connection().execution_options(
-                isolation_level="REPEATABLE READ"
-            )
-            session.begin()
-            session.execute(text("""
+            db.session().execute(text("""
+                SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
+            """))
+            db.session.execute(text("""
                 UPDATE item_verification
                 SET v_conclusion = :v_conclusion, conclude_at = :conclude_at
                 WHERE iv_id = :iv_id
             """),
             {"v_conclusion": data["v_conclusion"], "conclude_at": datetime.now(), "iv_id": iv_id}
-            ).mappings().first()
-            result = session.execute(text("""
+            )
+            result = db.session.execute(text("""
                     SELECT m_id, item.i_id 
                     FROM item_verification
                     join item on item_verification.i_id = item.i_id
@@ -213,10 +211,10 @@ def conclude_verification(token: str, iv_id: int, data: dict):
                 {"iv_id": iv_id}
                 ).mappings().first()
             if not result:
-                session.rollback()
+                db.session.rollback()
                 return False, {"message": "Item verification not found"}
             if data["v_conclusion"] == "Pass":
-                session.execute(text("""
+                db.session.execute(text("""
                 update contribution
                 set is_active = true
                 where m_id = :m_id and i_id = :i_id
@@ -224,25 +222,25 @@ def conclude_verification(token: str, iv_id: int, data: dict):
                 {"m_id": result["m_id"], "i_id": result["i_id"]}
                 )
             elif data["v_conclusion"] == "Fail":
-                check_have_contribution = session.execute(text("""
+                check_have_contribution = db.session.execute(text("""
                     SELECT COUNT(*) FROM contribution
                     WHERE m_id = :m_id and i_id = :i_id
                 """),
                 {"m_id": result["m_id"], "i_id": result["i_id"]}
                 ).scalar()
                 if check_have_contribution != 0:
-                    session.execute(text("""
+                    db.session.execute(text("""
                         UPDATE contribution
                         SET is_active = false
                         WHERE m_id = :m_id and i_id = :i_id
                     """),
                     {"m_id": result["m_id"], "i_id": result["i_id"]}
                     )
-            session.commit()
+            db.session.commit()
 
             return True, {"message": "Success"}
         except Exception as e:
             return False, {"message": str(e)}
         finally:
-            session.close()
+            db.session.close()
     return False, {"message": "Unauthorized"}

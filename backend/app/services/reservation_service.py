@@ -15,14 +15,13 @@ def check_item_available(session, i_id: int, p_id: int, est_start_at: datetime, 
     """
 
     conflict_count = session.execute(text("""
-        SELECT COUNT(*)
+        SELECT rd.rd_id
         FROM reservation_detail rd
         JOIN reservation r ON rd.r_id = r.r_id
         WHERE rd.i_id = :i_id
         AND r.is_deleted = false
-        AND (
-            (rd.est_start_at < :est_due_at) AND (rd.est_due_at > :est_start_at)
-        )
+        AND ((rd.est_start_at, rd.est_due_at) OVERLAPS (:est_start_at, :est_due_at))
+        FOR UPDATE OF rd
     """), {
         "i_id": i_id,
         "est_start_at": est_start_at,
@@ -122,6 +121,7 @@ def create_reservation(token: str, data: dict):
                         SELECT c_id FROM category_tree
                     )
                     LIMIT 1
+                    FOR UPDATE OF contribution
                 """), {
                     "root_c_id": root_c_id,
                     "m_id": m_id,

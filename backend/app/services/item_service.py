@@ -155,6 +155,7 @@ def update_item(token: str, i_id: int, data: dict):
                             SELECT i_id, i_name, status, description, out_duration, c_id, is_active FROM item
                             join contribution on item.i_id = contribution.i_id
                             WHERE item.i_id = :i_id and item.m_id = :user_id
+                            FOR UPDATE
                         """),
                     {"i_id": i_id, "user_id": user_id}).mappings().first()
                 if item_original["status"] == "Borrowed":

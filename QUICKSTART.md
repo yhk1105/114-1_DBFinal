@@ -6,7 +6,7 @@
 
 1. **進入後端目錄並安裝依賴**：
    ```bash
-   cd backend/app
+   cd backend
    pip install -r requirements.txt
    ```
 
@@ -119,4 +119,5 @@
 1. 後端日誌輸出
 2. 瀏覽器控制台錯誤訊息
 3. 網路請求（F12 → Network 標籤）
+
 

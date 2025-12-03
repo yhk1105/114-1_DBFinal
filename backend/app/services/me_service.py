@@ -223,6 +223,7 @@ def review_item(token: str, l_id: int, data: dict):
     if active_role != "member":
         return False, "Only members can review items"
     try:
+        db.session.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
         # 1. 查詢 Loan 資訊，確認使用者是否有權評論，並找出 reviewee_id
         loan_info = db.session.execute(
         text("""
@@ -260,6 +261,7 @@ def review_item(token: str, l_id: int, data: dict):
             text("""
                 SELECT 1 FROM review 
                 WHERE l_id = :l_id AND reviewer_id = :reviewer_id
+                FOR UPDATE OF review
             """),
             {"l_id": l_id, "reviewer_id": user_id}
         ).first()

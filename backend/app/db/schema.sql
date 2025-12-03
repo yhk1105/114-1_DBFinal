@@ -168,7 +168,7 @@ CREATE TABLE category_ban (
     m_id BIGINT NOT NULL,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     ban_at TIMESTAMP NOT NULL,
-    PRIMARY KEY (s_id, c_id, m_id),
+    PRIMARY KEY (c_id, m_id),
 
     FOREIGN KEY (s_id)
         REFERENCES staff(s_id)
@@ -189,7 +189,7 @@ CREATE TABLE category_ban (
 CREATE TABLE report (
     re_id BIGSERIAL PRIMARY KEY,
     comment VARCHAR(200) NOT NULL,
-    r_conclusion VARCHAR(10) CHECK(r_conclusion IN ('Withdraw','Ban Category','Delist','Pending')),
+    r_conclusion VARCHAR(20) CHECK(r_conclusion IN ('Withdraw','Ban Category','Delist','Pending')),
     create_at TIMESTAMP NOT NULL,
     conclude_at TIMESTAMP,
     m_id BIGINT NOT NULL,
@@ -227,7 +227,7 @@ CREATE TABLE loan (
 
 CREATE TABLE loan_event (
     timestamp BIGINT NOT NULL,
-    event_type VARCHAR(10) NOT NULL 
+    event_type VARCHAR(20) NOT NULL 
         CHECK (event_type IN ('Handover','Extend','Mark_overdue','Return')),
     l_id BIGINT NOT NULL,
     PRIMARY KEY (timestamp, l_id),

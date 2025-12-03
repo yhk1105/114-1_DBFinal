@@ -97,9 +97,6 @@ def upload_item(token: str, data: dict):
         return False, "Unauthorized"
     if active_role == "member":
         try:
-            db.session.execute(
-                text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
-
             item_row = Item(i_name=data["i_name"], status="Not verified",
                             description=data["description"], out_duration=data["out_duration"], m_id=user_id, c_id=data["c_id"])
             db.session.flush()

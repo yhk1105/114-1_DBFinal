@@ -40,12 +40,13 @@ def punch_in_loan(token: str, l_id: int, data: dict):
         return False, "Unauthorized"
     if active_role == "member":
         try:
-            db.session.connection().execution_options(
-                isolation_level="REPEATABLE READ"
-            )
+            db.session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+
+            # 使用更高精度的 timestamp (毫秒級) 避免衝突
+            timestamp_ms = int(datetime.now().timestamp() * 1000)
 
             loan_event = LoanEvent(
-                timestamp=int(datetime.now().timestamp()),
+                timestamp=timestamp_ms,
                 event_type=data["event_type"],
                 l_id=l_id
             )

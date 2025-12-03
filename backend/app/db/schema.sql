@@ -194,7 +194,7 @@ CREATE TABLE report (
     conclude_at TIMESTAMP,
     m_id BIGINT NOT NULL,
     i_id BIGINT NOT NULL,
-    s_id BIGINT NOT NULL ,
+    s_id BIGINT NOT NULL DEFAULT 0,
 
     FOREIGN KEY (m_id)
         REFERENCES member(m_id)

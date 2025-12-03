@@ -40,13 +40,14 @@ def change_contribution(session, m_id: int, i_id: int) -> bool:
     處理更改貢獻。
     使用 root category 來檢查：只要在同一個 root category 下，就可以互用。
     """
-    # 1. 取得物品資訊
+    # 1. 取得物品資訊並鎖定
     item_original = session.execute(
         text("""
-            SELECT i_id, i_name, status, description, out_duration, c_id, is_active 
-            FROM item
-            JOIN contribution ON item.i_id = contribution.i_id
+            SELECT i_id, i_name, status, description, out_duration, c_id, is_active
+            FROM item i
+            JOIN contribution c ON item.i_id = contribution.i_id
             WHERE item.i_id = :i_id AND item.m_id = :user_id
+            FOR UPDATE OF i, c
         """),
         {"i_id": i_id, "user_id": m_id}
     ).mappings().first()
@@ -58,6 +59,7 @@ def change_contribution(session, m_id: int, i_id: int) -> bool:
     check_this_contribution = session.execute(text("""
         SELECT is_active FROM contribution
         WHERE m_id = :m_id AND i_id = :i_id
+        FOR UPDATE
     """), {
         "m_id": m_id,
         "i_id": i_id
@@ -80,9 +82,9 @@ def change_contribution(session, m_id: int, i_id: int) -> bool:
     check_root_category_contribution = session.execute(
         text("""
             SELECT contribution.i_id
-            FROM contribution
+            FROM contribution c
             JOIN item ON contribution.i_id = item.i_id
-            WHERE contribution.m_id = :m_id 
+            WHERE contribution.m_id = :m_id
             AND contribution.is_active = true
             AND contribution.i_id != :current_i_id
             AND item.c_id IN (
@@ -90,17 +92,18 @@ def change_contribution(session, m_id: int, i_id: int) -> bool:
                 WITH RECURSIVE category_tree AS (
                     -- 起始點：root category
                     SELECT c_id FROM category WHERE c_id = :root_c_id
-                    
+
                     UNION ALL
-                    
+
                     -- 遞迴向下查找所有子類別
-                    SELECT c.c_id 
+                    SELECT c.c_id
                     FROM category c
                     JOIN category_tree ct ON c.parent_c_id = ct.c_id
                 )
                 SELECT c_id FROM category_tree
             )
             LIMIT 1
+            FOR UPDATE OF c
         """),
         {
             "m_id": m_id,

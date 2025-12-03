@@ -32,7 +32,7 @@
    
    **方法 A：使用 Python（推薦）**
    ```bash
-   cd frontend
+   cd test_frontend
    python3 -m http.server 8080
    ```
    

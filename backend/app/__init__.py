@@ -9,6 +9,7 @@ from .routes.owner import owner_bp
 from .routes.reservation import reservation_bp
 from .routes.staff import staff_bp
 
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)

@@ -22,7 +22,7 @@
    python run.py
    ```
    
-   後端應該會在 `http://localhost:8000` 運行
+   後端應該會在 `http://localhost:8070` 運行
 
 ## 步驟 2：設定前端
 

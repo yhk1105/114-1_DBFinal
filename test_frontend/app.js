@@ -1,5 +1,5 @@
 // API 基礎設定
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:8070';
 
 // API 服務類別
 const api = {

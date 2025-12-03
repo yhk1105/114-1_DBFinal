@@ -43,6 +43,19 @@ def check_item_available(session, i_id: int, p_id: int, est_start_at: datetime, 
 
     return pid_check > 0
 
+def get_pickup_places(i_id: int):
+    """
+    處理取得物品可取貨地點請求。
+    """
+    pickup_places = db.session.execute(text("""
+        SELECT p_id, p_name
+        FROM item_pick
+        join pick_up_place on item_pick.p_id = pick_up_place.p_id
+        WHERE item_pick.i_id = :i_id and item_pick.is_deleted = false and item_pick.is_delete = true
+    """), {
+        "i_id": i_id,
+    }).mappings().all()
+    return pickup_places
 
 def create_reservation(token: str, data: dict):
     """

@@ -7,4 +7,4 @@ class Member(db.Model):
     m_mail = db.Column(db.String(120), unique=True, nullable=False)
     m_name = db.Column(db.String(50), nullable=False)
     m_password = db.Column(db.String(255), nullable=False)
-    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False)

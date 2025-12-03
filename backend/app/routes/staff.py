@@ -1,148 +1,92 @@
 from flask import Blueprint, request, jsonify
-from app.services.item_service import get_item_detail, get_category_items, get_item_borrowed_time, upload_item, update_item, report_item, verify_item
+from app.services.staff_service import get_this_staff, get_not_deal_reports, conclude_report, get_not_deal_verification, conclude_verification
 
-item_bp = Blueprint("item", __name__)
+staff_bp = Blueprint("staff", __name__)
 
-
-@item_bp.get("/item/<int:i_id>")
-def get_this_item_detail(i_id):
+@staff_bp.get("/staff")
+def get_staff():
     """
-    處理取得物品詳細資訊請求。
+    處理取得員工資訊請求。
 
-    接收物品 ID，
-    取得物品詳細資訊後回傳。
+    接收員工 ID，
+    取得員工資訊後回傳。
     """
-
     auth_header = request.headers.get("Authorization")
-
-    # 檢查格式是否正確 (Bearer <token>)
     if not auth_header or not auth_header.startswith("Bearer "):
         return jsonify({"error": "Unauthorized: Missing or invalid token"}), 401
-
     token = auth_header.split(" ")[1]  # 取出 "Bearer " 後面的 token 字串
-
     if not token:
         return jsonify({"error": "Unauthorized"}), 401
-    ok, result = get_item_detail(i_id)
+    ok, result = get_this_staff(token)
     if not ok:
         return jsonify({"error": result}), 401
     return jsonify(result)
 
-
-@item_bp.get("/item/category/<int:c_id>")
-def get_this_category_items(c_id):
+@staff_bp.get("/staff/report")
+def get_not_deal_reports_route():
     """
-    處理取得特定類別物品請求。
+    處理取得未處理的檢舉資訊請求。
 
-    接收類別 ID，
-    取得特定類別物品後回傳。
+    接收員工 ID，
+    取得未處理的檢舉資訊後回傳。
     """
-
-    if not c_id:
-        return jsonify({"error": "Category ID is required"}), 400
-    ok, result = get_category_items(c_id)
-    if not ok:
-        return jsonify({"error": result}), 401
-    return jsonify(result)
-
-
-@item_bp.get("/item/<int:i_id>/borrowed_time")
-def get_this_item_borrowed_time(i_id):
-    """
-    處理取得物品借用時間請求。
-
-    接收物品 ID，
-    取得物品借用時間後回傳。
-    """
-    ok, result = get_item_borrowed_time(i_id)
-    if not ok:
-        return jsonify({"error": result}), 401
-    return jsonify(result)
-
-
-@item_bp.post("/item/upload")
-def upload_new_item():
-    """
-    處理上傳新物品請求。
-
-    接收物品資訊，
-    上傳新物品後回傳。
-    """
-
     auth_header = request.headers.get("Authorization")
-
-    # 檢查格式是否正確 (Bearer <token>)
     if not auth_header or not auth_header.startswith("Bearer "):
         return jsonify({"error": "Unauthorized: Missing or invalid token"}), 401
-
     token = auth_header.split(" ")[1]  # 取出 "Bearer " 後面的 token 字串
+    if not token:
+        return jsonify({"error": "Unauthorized"}), 401
+    ok, result = get_not_deal_reports(token)
+    if not ok:
+        return jsonify({"error": result}), 401
+    return jsonify(result)
+
+@staff_bp.post("/staff/report/<int:re_id>")
+def conclude_this_report(re_id):
+    """
+    處理結案檢舉請求。
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Unauthorized: Missing or invalid token"}), 401
+    token = auth_header.split(" ")[1]  # 取出 "Bearer " 後面的 token 字串
+    if not token:
+        return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json() or {}
-    if not token:
-        return jsonify({"error": "Unauthorized"}), 401
-    ok, result = upload_item(token, data)
+    ok, result = conclude_report(token, re_id, data)
     if not ok:
         return jsonify({"error": result}), 401
     return jsonify(result)
 
-
-@item_bp.put("/item/<int:i_id>")
-def update_this_item(i_id):
+@staff_bp.get("/staff/verification")
+def get_not_deal_verification_route():
     """
-    處理更新物品請求。
-
-    接收物品 ID 和物品資訊，
-    更新物品後回傳。
+    處理取得未處理的驗證資訊請求。
     """
     auth_header = request.headers.get("Authorization")
-     
-    # 檢查格式是否正確 (Bearer <token>)
     if not auth_header or not auth_header.startswith("Bearer "):
         return jsonify({"error": "Unauthorized: Missing or invalid token"}), 401
-        
     token = auth_header.split(" ")[1]  # 取出 "Bearer " 後面的 token 字串
+    if not token:
+        return jsonify({"error": "Unauthorized"}), 401
+    ok, result = get_not_deal_verification(token)
+    if not ok:
+        return jsonify({"error": result}), 401
+    return jsonify(result)
+
+@staff_bp.post("/staff/verification/<int:iv_id>")
+def conclude_this_verification(iv_id):
+    """
+    處理結案驗證請求。
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Unauthorized: Missing or invalid token"}), 401
+    token = auth_header.split(" ")[1]  # 取出 "Bearer " 後面的 token 字串
+    if not token:
+        return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json() or {}
-    if not token:
-        return jsonify({"error": "Unauthorized"}), 401
-    ok, result = update_item(token, i_id, data)
-    if not ok:
-        return jsonify({"error": result}), 401
-    return jsonify(result)
-
-@item_bp.post("/item/<int:i_id>/report")
-def report_this_item(i_id):
-    """
-    處理檢舉物品請求。
-
-    接收物品 ID，
-    檢舉物品後回傳。
-    """
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        return jsonify({"error": "Unauthorized: Missing or invalid token"}), 401
-    token = auth_header.split(" ")[1]  # 取出 "Bearer " 後面的 token 字串
-    data = request.get_json() or {}
-    if not token:
-        return jsonify({"error": "Unauthorized"}), 401
-    ok, result = report_item(token, i_id, data)
-    if not ok:
-        return jsonify({"error": result}), 401
-    return jsonify(result)
-
-@item_bp.post("/item/<int:i_id>/verify")
-def verify_this_item(i_id):
-    """
-    處理驗證物品請求。
-
-    接收物品 ID，
-    驗證物品後回傳。
-    """
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        return jsonify({"error": "Unauthorized: Missing or invalid token"}), 401
-    token = auth_header.split(" ")[1]  # 取出 "Bearer " 後面的 token 字串
-    if not token:
-        return jsonify({"error": "Unauthorized"}), 401
-    ok, result = verify_item(token, i_id)
+    ok, result = conclude_verification(token, iv_id, data)
     if not ok:
         return jsonify({"error": result}), 401
     return jsonify(result)

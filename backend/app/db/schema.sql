@@ -1,5 +1,10 @@
+-- 建立 schema
+CREATE SCHEMA IF NOT EXISTS our_things;
+SET search_path TO our_things;
+
+-- 建立資料表
 CREATE TABLE member (
-    m_id BIGINT PRIMARY KEY,
+    m_id BIGSERIAL PRIMARY KEY,
     m_name VARCHAR(20) NOT NULL UNIQUE,
     m_mail VARCHAR(60) NOT NULL UNIQUE,
     m_password VARCHAR(255) NOT NULL,
@@ -7,7 +12,7 @@ CREATE TABLE member (
 );
 
 CREATE TABLE category (
-    c_id BIGINT PRIMARY KEY,
+    c_id BIGSERIAL PRIMARY KEY,
     c_name VARCHAR(20) NOT NULL,
     parent_c_id BIGINT,
     CONSTRAINT fk_category_parent
@@ -18,7 +23,7 @@ CREATE TABLE category (
 );
 
 CREATE TABLE staff (
-    s_id BIGINT PRIMARY KEY DEFAULT 0,
+    s_id BIGSERIAL PRIMARY KEY,
     s_name VARCHAR(20) NOT NULL,
     s_mail VARCHAR(60) NOT NULL UNIQUE,
     s_password VARCHAR(255) NOT NULL,
@@ -26,13 +31,10 @@ CREATE TABLE staff (
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE
 );
 
---先插員工編號 0 的預設員工帳號
-INSERT INTO staff (s_id, s_mail, s_password, role, is_deleted)
-VALUES (0, 'default.staff@ourthings.com', 'scrypt:32768:8:1$Kh2XAArcfrwEqo6O$823f306e62ac2e0b568a7f59644c7fba2602cdca7783c69cda1e8c7d3e7e6ec834de9d102d6f7ba91aee167ba6e7272c7a190fa13c8f600550af5aac99a46d4e', 'Employee', FALSE)
-ON CONFLICT (s_id) DO NOTHING;
+
 
 CREATE TABLE pick_up_place (
-    p_id BIGINT PRIMARY KEY,
+    p_id BIGSERIAL PRIMARY KEY,
     p_name VARCHAR(100) NOT NULL,
     address VARCHAR(100) NOT NULL,
     note VARCHAR(200),
@@ -40,7 +42,7 @@ CREATE TABLE pick_up_place (
 );
 
 CREATE TABLE item (
-    i_id BIGINT PRIMARY KEY,
+    i_id BIGSERIAL PRIMARY KEY,
     i_name VARCHAR(20) NOT NULL,
     status VARCHAR(15) NOT NULL 
         CHECK (status IN ('Borrowed','Reservable','Not reservable', 'Not verified')),
@@ -63,6 +65,7 @@ CREATE TABLE item (
 CREATE TABLE item_pick (
     i_id BIGINT NOT NULL,
     p_id BIGINT NOT NULL,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (i_id, p_id),
 
     FOREIGN KEY (i_id)
@@ -90,7 +93,7 @@ CREATE TABLE item_photo (
 );
 
 CREATE TABLE item_verification (
-    iv_id BIGINT PRIMARY KEY,
+    iv_id BIGSERIAL PRIMARY KEY,
     v_conclusion VARCHAR(10) CHECK(v_conclusion IN ('Pass','Fail','Pending')),
     create_at TIMESTAMP NOT NULL,
     i_id BIGINT NOT NULL,
@@ -108,7 +111,7 @@ CREATE TABLE item_verification (
 );
 
 CREATE TABLE reservation (
-    r_id BIGINT PRIMARY KEY,
+    r_id BIGSERIAL PRIMARY KEY,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     create_at TIMESTAMP NOT NULL,
     m_id BIGINT NOT NULL,
@@ -120,7 +123,7 @@ CREATE TABLE reservation (
 );
 
 CREATE TABLE reservation_detail (
-    rd_id BIGINT PRIMARY KEY,
+    rd_id BIGSERIAL PRIMARY KEY,
     est_start_at TIMESTAMP NOT NULL,
     est_due_at TIMESTAMP NOT NULL,
     r_id BIGINT NOT NULL,
@@ -166,7 +169,7 @@ CREATE TABLE category_ban (
     m_id BIGINT NOT NULL,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     ban_at TIMESTAMP NOT NULL,
-    PRIMARY KEY (s_id, c_id, m_id),
+    PRIMARY KEY (c_id, m_id),
 
     FOREIGN KEY (s_id)
         REFERENCES staff(s_id)
@@ -186,9 +189,9 @@ CREATE TABLE category_ban (
 
 -- 'Withdraw'（不對該使用者懲處）,'Ban Category' （禁止他借用這個類別，同時下架該商品）,'Delist'（下架該商品就好）,'Pending'（等待員工查驗）
 CREATE TABLE report (
-    re_id BIGINT PRIMARY KEY,
+    re_id BIGSERIAL PRIMARY KEY,
     comment VARCHAR(200) NOT NULL,
-    r_conclusion VARCHAR(20) CHECK(r_conclusion IN ('Withdraw','Ban Category','Delist', 'Pending')),
+    r_conclusion VARCHAR(20) CHECK(r_conclusion IN ('Withdraw','Ban Category','Delist','Pending')),
     create_at TIMESTAMP NOT NULL,
     conclude_at TIMESTAMP,
     m_id BIGINT NOT NULL,
@@ -212,10 +215,10 @@ CREATE TABLE report (
 );
 
 CREATE TABLE loan (
-    l_id BIGINT PRIMARY KEY,
-    rd_id BIGINT NOT NULL,
-    actual_start_at TIMESTAMP NOT NULL,
-    actual_return_at TIMESTAMP NOT NULL,
+    l_id BIGSERIAL PRIMARY KEY,
+    rd_id BIGINT NOT NULL UNIQUE,
+    actual_start_at TIMESTAMP,
+    actual_return_at TIMESTAMP,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
 
     FOREIGN KEY (rd_id)
@@ -226,7 +229,7 @@ CREATE TABLE loan (
 
 CREATE TABLE loan_event (
     timestamp BIGINT NOT NULL,
-    event_type VARCHAR(15) NOT NULL 
+    event_type VARCHAR(20) NOT NULL 
         CHECK (event_type IN ('Handover','Extend','Mark_overdue','Return')),
     l_id BIGINT NOT NULL,
     PRIMARY KEY (timestamp, l_id),
@@ -238,7 +241,7 @@ CREATE TABLE loan_event (
 );
 
 CREATE TABLE review (
-    review_id BIGINT PRIMARY KEY,
+    review_id BIGSERIAL PRIMARY KEY,
     score INT NOT NULL CHECK(score BETWEEN 1 AND 5),
     comment VARCHAR(200) NOT NULL,
     reviewer_id BIGINT NOT NULL,
@@ -259,7 +262,9 @@ CREATE TABLE review (
     FOREIGN KEY (l_id)
         REFERENCES loan(l_id)
         ON DELETE RESTRICT
-        ON UPDATE CASCADE
+        ON UPDATE CASCADE,
+    CONSTRAINT uniq_review_per_loan_reviewer
+    UNIQUE (reviewer_id, l_id)
 );
 
 

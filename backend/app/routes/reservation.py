@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from app.services.reservation_service import create_reservation, delete_reservation
+from app.services.reservation_service import create_reservation, delete_reservation, get_pickup_places
 
 
 reservation_bp = Blueprint("reservation", __name__)
@@ -32,3 +32,12 @@ def delete_this_reservation(r_id):
     if not ok:
         return jsonify({"error": result}), 401
     return jsonify({"result": result}), 200
+
+@reservation_bp.get("/reservation/<int:i_id>")
+def get_this_pickup_places(i_id):
+    """
+    處理取得物品可取貨地點請求。
+    """
+    pickup_places = get_pickup_places(i_id)
+    return jsonify({"pickup_places": pickup_places}), 200
+

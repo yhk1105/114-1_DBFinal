@@ -66,7 +66,8 @@ def register_service(name: str, email: str, password: str):
     db.session.add(new_member)
     try:
         db.session.commit()
+        return True, {"m_id": new_member.m_id, "m_name": name, "m_email": email}
     except IntegrityError:
         db.session.rollback()
         return False, "member already exists"
-    return True, {"m_id": new_member.m_id, "m_name": name, "m_email": email}
+    

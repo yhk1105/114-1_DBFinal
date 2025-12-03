@@ -1,6 +1,7 @@
 from flask import Flask
 from flask_cors import CORS
 from .config import Config
+from sqlalchemy import text
 from .extensions import db
 from .routes.auth import auth_bp
 from .routes.item import item_bp
@@ -19,6 +20,14 @@ def create_app():
 
     # 初始化 SQLAlchemy
     db.init_app(app)
+    with app.app_context():
+        try:
+            db.session.execute(text("SET search_path TO our_things"))
+            db.session.commit()
+        except Exception as e:
+            # 如果設定失敗，可能是資料庫尚未建立 schema
+            # 這不會阻止應用啟動，但需要確保 schema 已建立
+            app.logger.warning(f"無法設定 search_path: {e}")
 
     # 註冊 Blueprint
     app.register_blueprint(auth_bp)

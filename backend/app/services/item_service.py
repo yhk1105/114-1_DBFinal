@@ -227,7 +227,7 @@ def update_item(token: str, i_id: int, data: dict):
                     # 取得目前資料庫中該 item 的所有 pick records
                     existing_picks = db.session.execute(
                         text("""
-                            SELECT p_id, is_active FROM item_pick
+                            SELECT p_id, is_deleted FROM item_pick
                             WHERE i_id = :i_id
                         """),
                         {"i_id": i_id}).mappings().all()
@@ -239,18 +239,18 @@ def update_item(token: str, i_id: int, data: dict):
                     for p_id in new_p_id_list:
                         if p_id in existing_p_ids:
                             # 如果本來就有，且目前是不活躍 (is_active=False)，則設為 True
-                            if not existing_p_ids[p_id]["is_active"]:
+                            if not existing_p_ids[p_id]["is_deleted"]:
                                 db.session.execute(
                                     text("""
                                         UPDATE item_pick
-                                        SET is_active = True
+                                        SET is_deleted = False
                                         WHERE i_id = :i_id and p_id = :p_id
                                     """),
                                     {"i_id": i_id, "p_id": p_id})
                         else:
                             # 如果本來沒有，則新增
                             new_pick = ItemPick(
-                                i_id=i_id, p_id=p_id, is_active=True)
+                                i_id=i_id, p_id=p_id)
                             db.session.add(new_pick)
 
                     # 檢查是否有被移除的 p_id (在資料庫中有，但在新清單中沒有)
@@ -259,7 +259,7 @@ def update_item(token: str, i_id: int, data: dict):
                             db.session.execute(
                                 text("""
                                     UPDATE item_pick
-                                    SET is_active = False
+                                    SET is_deleted = True
                                     WHERE i_id = :i_id and p_id = :p_id
                                 """),
                                 {"i_id": i_id, "p_id": p_id})

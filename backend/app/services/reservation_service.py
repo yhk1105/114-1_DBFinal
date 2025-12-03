@@ -34,7 +34,7 @@ def check_item_available(session, i_id: int, p_id: int, est_start_at: datetime, 
         SELECT COUNT(*)
         FROM item i
         join item_pick ip on i.i_id = ip.i_id
-        WHERE ip.p_id = :p_id
+        WHERE ip.p_id = :p_id and ip.is_deleted = false
         AND i.i_id = :i_id
     """), {
         "p_id": p_id,

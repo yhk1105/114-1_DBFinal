@@ -114,14 +114,14 @@ INSERT INTO item (i_id, i_name, status, description, out_duration, m_id, c_id) V
 (26, '田園風桌巾', 'Reservable', '適合野餐、拍食物照', 172800, 2, 33),
 (27, '餅乾模具', 'Reservable', '有動物系列和萬聖節系列~', 172800, 3, 7);
 
-INSERT INTO staff (s_id, s_mail, s_password, role, is_deleted)
+INSERT INTO staff (s_id, s_name, s_mail, s_password, role, is_deleted)
 VALUES
-(1, 'alex.huang@ourthings.com', 'scrypt:32768:8:1$Z62WGSbiuiBvZa46$bf6190bf86c74accc1b2f6e245c15dc014d1ce27bbdb78f2ddd974578bdbd5e97cafdf4b27a73cb46b5e4c338a3109c35cc3ae0f293127a728e9c1aceeced289', 'Manager', FALSE),
-(2, 'tina.wu@ourthings.com', 'scrypt:32768:8:1$EtXoHdJImQyaLkUv$534b7880c2ed2da056b6b0757101d5117c88c9ca12502e2237cb2a5e1d644d50cf183861b0cd1f7bdf3ee881b63dbf46f787ddb2d43e4792f1b5c19c2f9add73', 'Employee', FALSE),
-(3, 'charles.lin@ourthings.com', 'scrypt:32768:8:1$IHXgJacBBACFcMmZ$a2e7f15dc4532df7053177ae4710161561ec3503fe8e17d9ea7996aba02b7b13f1c842ee1a87fb82ca585c2f20bda341af54cc897ca20da78a4b0dbd6a8e0c2e', 'Employee', FALSE),
-(4, 'vivian.chang@ourthings.com', 'scrypt:32768:8:1$GGzX1YWdxZdNrrtv$06e0043680143da10ff1201379c65329179bfbdc60b3f0e9e0f26125f3893892efd4f4eb8f4891c9d20e6f5436972a295b82df3731d786ac3078d9c41cea9fe9', 'Manager', FALSE),
-(5, 'jason.lee@ourthings.com', 'scrypt:32768:8:1$Mb3KsH9lkMoxgIKT$fa1708c19077c9beddf819ad7c4ec95e602ace776f3e7c9fc76d07597c09bb3fe3b1fb64330c3c3b0b7c525b9a3290758ce0a70b89ed96d3b7f0c3b1ad564f67', 'Employee', FALSE),
-(6, 'irene.tsai@ourthings.com', 'scrypt:32768:8:1$dgX3O3SFFxecUh00$7ddd6bcb4109c157a6c8bd83ee62266dcad11d0570094667a8f16c64956dc8b71c207fc947a527e2e8e245a8b2d5b8bb5086f8e804feb3a64a4f5f411b24c2bf', 'Employee', FALSE);
+(1, 'alex', 'alex.huang@ourthings.com', 'scrypt:32768:8:1$Z62WGSbiuiBvZa46$bf6190bf86c74accc1b2f6e245c15dc014d1ce27bbdb78f2ddd974578bdbd5e97cafdf4b27a73cb46b5e4c338a3109c35cc3ae0f293127a728e9c1aceeced289', 'Manager', FALSE),
+(2, 'tina', 'tina.wu@ourthings.com', 'scrypt:32768:8:1$EtXoHdJImQyaLkUv$534b7880c2ed2da056b6b0757101d5117c88c9ca12502e2237cb2a5e1d644d50cf183861b0cd1f7bdf3ee881b63dbf46f787ddb2d43e4792f1b5c19c2f9add73', 'Employee', FALSE),
+(3, 'charles', 'charles.lin@ourthings.com', 'scrypt:32768:8:1$IHXgJacBBACFcMmZ$a2e7f15dc4532df7053177ae4710161561ec3503fe8e17d9ea7996aba02b7b13f1c842ee1a87fb82ca585c2f20bda341af54cc897ca20da78a4b0dbd6a8e0c2e', 'Employee', FALSE),
+(4, 'vivian', 'vivian.chang@ourthings.com', 'scrypt:32768:8:1$GGzX1YWdxZdNrrtv$06e0043680143da10ff1201379c65329179bfbdc60b3f0e9e0f26125f3893892efd4f4eb8f4891c9d20e6f5436972a295b82df3731d786ac3078d9c41cea9fe9', 'Manager', FALSE),
+(5, 'jason', 'jason.lee@ourthings.com', 'scrypt:32768:8:1$Mb3KsH9lkMoxgIKT$fa1708c19077c9beddf819ad7c4ec95e602ace776f3e7c9fc76d07597c09bb3fe3b1fb64330c3c3b0b7c525b9a3290758ce0a70b89ed96d3b7f0c3b1ad564f67', 'Employee', FALSE),
+(6, 'irene', 'irene.tsai@ourthings.com', 'scrypt:32768:8:1$dgX3O3SFFxecUh00$7ddd6bcb4109c157a6c8bd83ee62266dcad11d0570094667a8f16c64956dc8b71c207fc947a527e2e8e245a8b2d5b8bb5086f8e804feb3a64a4f5f411b24c2bf', 'Employee', FALSE);
 
 INSERT INTO item_verification (iv_id, v_conclusion, create_at, i_id, s_id) VALUES
 (1,  'Pending', '2025-11-10 14:22', 1, 3),
@@ -370,4 +370,3 @@ INSERT INTO contribution (m_id, i_id, is_active) VALUES
 
 INSERT INTO category_ban (s_id, c_id, m_id, is_deleted, ban_at) VALUES
 (2, 9, 10, FALSE, '2025-11-30 15:30');
-

@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app.services.reservation_service import create_reservation, delete_reservation, get_pickup_places
-
+from app.mongodb.funnel_tracker import log_event
 
 reservation_bp = Blueprint("reservation", __name__)
 
@@ -15,7 +15,21 @@ def create_this_reservation():
     token = auth_header.split(" ")[1]
     data = request.get_json() or {}
     ok, result = create_reservation(token, data)
+    if ok:
+        log_event(
+            event_type='create_reservation',
+            endpoint=f'/reservation/create',
+            success=True,
+            reservation_id=result["r_id"],
+        )
     if not ok:
+        log_event(
+            event_type='create_reservation',
+            endpoint=f'/reservation/create',
+            success=False,
+            error_reason=result,
+            item_ids=[rd.get('i_id') for rd in data.get('rd_list', [])] if isinstance(data, dict) else []
+        )
         return jsonify({"error": result}), 401
     return jsonify({"result": result}), 200
 
@@ -39,5 +53,11 @@ def get_this_pickup_places(i_id):
     處理取得物品可取貨地點請求。
     """
     pickup_places = get_pickup_places(i_id)
+    log_event(
+        event_type='get_pickup_places',
+        endpoint=f'/reservation/{i_id}',
+        success=True,
+        item_id=i_id,
+    )
     return jsonify({"pickup_places": pickup_places}), 200
 

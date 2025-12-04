@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app.services.item_service import get_item_detail, get_category_items, get_item_borrowed_time, upload_item, update_item, report_item, verify_item, get_subcategory_items
-
+from app.mongodb.funnel_tracker import log_event
 item_bp = Blueprint("item", __name__)
 
 @item_bp.get("/item/<int:i_id>")
@@ -23,6 +23,13 @@ def get_this_item_detail(i_id):
     if not token:
         return jsonify({"error": "Unauthorized"}), 401
     ok, result = get_item_detail(i_id)
+    log_event(
+        event_type='get_item_detail',
+        endpoint=f'/item/{i_id}',
+        success=ok,
+        item_id=i_id,
+        error_reason=result if not ok else None
+    )
     if not ok:
         return jsonify({"error": result}), 401
     return jsonify(result)
@@ -40,6 +47,13 @@ def get_this_category_items(c_id):
     if not c_id:
         return jsonify({"error": "Category ID is required"}), 400
     ok, result = get_category_items(c_id)
+    log_event(
+        event_type='browse_category',
+        endpoint=f'/item/category/{c_id}',
+        success=ok,
+        category_id=c_id,
+        error_reason=result if not ok else None
+    )
     if not ok:
         return jsonify({"error": result}), 401
     return jsonify(result)
@@ -50,6 +64,12 @@ def get_this_subcategory_items(c_id):
     """
     處理取得特定類別的子類別請求。
     """
+    log_event(
+        event_type='browse_subcategory',
+        endpoint=f'/item/category/{c_id}/subcategories',
+        success=True,
+        category_id=c_id,
+    )
     items = get_subcategory_items(c_id)
     return jsonify({"items": items}), 200
 
@@ -63,6 +83,13 @@ def get_this_item_borrowed_time(i_id):
     取得物品借用時間後回傳。
     """
     ok, result = get_item_borrowed_time(i_id)
+    log_event(
+        event_type='get_item_borrowed_time',
+        endpoint=f'/item/{i_id}/borrowed_time',
+        success=ok,
+        item_id=i_id,
+        error_reason=result if not ok else None
+    )
     if not ok:
         return jsonify({"error": result}), 401
     return jsonify(result)

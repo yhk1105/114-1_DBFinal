@@ -1,6 +1,33 @@
 // API 基礎設定
 const API_BASE_URL = 'http://localhost:8070';
 
+// Session ID 管理
+function getSessionId() {
+    let sessionId = localStorage.getItem('session_id');
+    if (!sessionId) {
+        // 生成新的 session_id
+        sessionId = crypto.randomUUID();
+        localStorage.setItem('session_id', sessionId);
+    }
+    return sessionId;
+}
+
+// 取得請求 headers（包含 Session ID 和 Token）
+function getHeaders(includeAuth = false) {
+    const headers = {
+        'X-Session-ID': getSessionId()
+    };
+    
+    if (includeAuth) {
+        const token = localStorage.getItem('token');
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+    }
+    
+    return headers;
+}
+
 // API 服務類別
 const api = {
     // 認證相關
@@ -9,6 +36,8 @@ const api = {
             email,
             password,
             login_as
+        }, {
+            headers: getHeaders()
         });
         return response.data;
     },
@@ -18,6 +47,8 @@ const api = {
             name,
             email,
             password
+        }, {
+            headers: getHeaders()
         });
         return response.data;
     },
@@ -25,45 +56,49 @@ const api = {
     // 物品相關
     async getItemDetail(i_id) {
         const response = await axios.get(`${API_BASE_URL}/item/${i_id}`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
 
     async getCategoryItems(c_id) {
-        const response = await axios.get(`${API_BASE_URL}/item/category/${c_id}`);
+        const response = await axios.get(`${API_BASE_URL}/item/category/${c_id}`, {
+            headers: getHeaders()
+        });
         return response.data;
     },
 
     async getItemBorrowedTime(i_id) {
-        const response = await axios.get(`${API_BASE_URL}/item/${i_id}/borrowed_time`);
+        const response = await axios.get(`${API_BASE_URL}/item/${i_id}/borrowed_time`, {
+            headers: getHeaders()
+        });
         return response.data;
     },
 
     async uploadItem(data) {
         const response = await axios.post(`${API_BASE_URL}/item/upload`, data, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
 
     async updateItem(i_id, data) {
         const response = await axios.put(`${API_BASE_URL}/item/${i_id}`, data, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
 
     async reportItem(i_id, comment) {
         const response = await axios.post(`${API_BASE_URL}/item/${i_id}/report`, { comment }, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
 
     async verifyItem(i_id) {
         const response = await axios.post(`${API_BASE_URL}/item/${i_id}/verify`, {}, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
@@ -71,35 +106,35 @@ const api = {
     // 個人資料相關
     async getProfile() {
         const response = await axios.get(`${API_BASE_URL}/me/profile`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
 
     async getMyItems() {
         const response = await axios.get(`${API_BASE_URL}/me/items`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
 
     async getMyReservations() {
         const response = await axios.get(`${API_BASE_URL}/me/reservations`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
 
     async getReservationDetail(r_id) {
         const response = await axios.get(`${API_BASE_URL}/me/reservation_detail/${r_id}`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
 
     async getReviewableItems() {
         const response = await axios.get(`${API_BASE_URL}/me/reviewable_items`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
@@ -109,14 +144,14 @@ const api = {
             score,
             comment
         }, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
 
     async getContributions() {
         const response = await axios.get(`${API_BASE_URL}/me/contributions`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
@@ -124,7 +159,7 @@ const api = {
     // 物主相關
     async getFutureReservationDetails() {
         const response = await axios.get(`${API_BASE_URL}/owner/future_reservation_details`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
@@ -133,7 +168,7 @@ const api = {
         const response = await axios.post(`${API_BASE_URL}/owner/punch_in_loan/${l_id}`, {
             event_type
         }, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
@@ -143,14 +178,21 @@ const api = {
         const response = await axios.post(`${API_BASE_URL}/reservation/create`, {
             rd_list
         }, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
 
     async deleteReservation(r_id) {
         const response = await axios.delete(`${API_BASE_URL}/reservation/delete/${r_id}`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
+        });
+        return response.data;
+    },
+
+    async getPickupPlaces(i_id) {
+        const response = await axios.get(`${API_BASE_URL}/reservation/${i_id}`, {
+            headers: getHeaders()
         });
         return response.data;
     },
@@ -158,14 +200,14 @@ const api = {
     // 員工相關
     async getStaff() {
         const response = await axios.get(`${API_BASE_URL}/staff`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
 
     async getNotDealReports() {
         const response = await axios.get(`${API_BASE_URL}/staff/report`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
@@ -174,14 +216,14 @@ const api = {
         const response = await axios.post(`${API_BASE_URL}/staff/report/${re_id}`, {
             r_conclusion
         }, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
 
     async getNotDealVerification() {
         const response = await axios.get(`${API_BASE_URL}/staff/verification`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     },
@@ -190,7 +232,7 @@ const api = {
         const response = await axios.post(`${API_BASE_URL}/staff/verification/${iv_id}`, {
             v_conclusion
         }, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: getHeaders(true)
         });
         return response.data;
     }

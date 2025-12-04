@@ -5,3 +5,4 @@ flask-sqlalchemy
 werkzeug
 psycopg2-binary
 python-dotenv
+pymongo

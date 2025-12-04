@@ -64,14 +64,23 @@ def get_this_subcategory_items(c_id):
     """
     處理取得特定類別的子類別請求。
     """
-    log_event(
-        event_type='browse_subcategory',
-        endpoint=f'/item/category/{c_id}/subcategories',
-        success=True,
-        category_id=c_id,
-    )
-    items = get_subcategory_items(c_id)
-    return jsonify({"items": items}), 200
+    try:
+        items = get_subcategory_items(c_id)
+        log_event(
+            event_type='browse_subcategory',
+            endpoint=f'/item/category/{c_id}/subcategories',
+            success=True,
+            category_id=c_id,
+        )
+        return jsonify({"items": items}), 200
+    except Exception as e:
+        log_event(
+            event_type='browse_subcategory',
+            endpoint=f'/item/category/{c_id}/subcategories',
+            success=False,
+            error_reason=str(e),
+        )
+        return jsonify({"error": str(e)}), 500
 
 
 @item_bp.get("/item/<int:i_id>/borrowed_time")

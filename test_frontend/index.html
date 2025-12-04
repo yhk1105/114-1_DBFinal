@@ -252,14 +252,58 @@
                 </div>
 
                 <!-- 瀏覽物品 (Member) -->
-                <div v-if="currentView === 'browseItems' && userRole === 'member'">
+                <div v-if="currentView === 'browseItems' && userRole === 'member'" @click.self="browseCategorySelector.showDropdown = false">
                     <h2>瀏覽物品</h2>
                     <div class="mb-3">
                         <label class="form-label">選擇類別</label>
-                        <select class="form-select" v-model="selectedCategory" @change="loadCategoryItems">
-                            <option value="">全部類別</option>
-                            <option v-for="cat in categories" :key="cat.c_id" :value="cat.c_id">{{ cat.c_name }}</option>
-                        </select>
+                        <div class="position-relative" @click.stop>
+                            <input 
+                                type="text" 
+                                class="form-control" 
+                                :value="browseCategorySelector.displayText || '點擊選擇類別（可選）'" 
+                                @click="onBrowseCategoryFieldClick"
+                                @focus="onBrowseCategoryFieldClick"
+                                readonly
+                                placeholder="點擊選擇類別（可選）"
+                            >
+                            <div 
+                                v-if="browseCategorySelector.showDropdown" 
+                                class="dropdown-menu show position-absolute w-100" 
+                                style="z-index: 1050; max-height: 300px; overflow-y: auto; top: 100%;"
+                                @click.stop
+                            >
+                                <div v-if="browseCategorySelector.currentSubcategories.length === 0 && browseCategorySelector.selectedPath.length === 0" class="dropdown-item text-muted">
+                                    載入中...
+                                </div>
+                                <a 
+                                    v-for="cat in browseCategorySelector.currentSubcategories" 
+                                    :key="cat.c_id"
+                                    class="dropdown-item" 
+                                    href="#" 
+                                    @click.prevent="selectBrowseCategory(cat)"
+                                >
+                                    {{ cat.c_name }}
+                                </a>
+                                <div class="dropdown-divider" v-if="browseCategorySelector.selectedPath.length > 0"></div>
+                                <a 
+                                    class="dropdown-item text-muted" 
+                                    href="#" 
+                                    @click.prevent="finishBrowseCategorySelection"
+                                    v-if="browseCategorySelector.selectedPath.length > 0"
+                                >
+                                    完成選擇（使用當前類別）
+                                </a>
+                                <div class="dropdown-divider" v-if="browseCategorySelector.selectedPath.length > 0"></div>
+                                <a 
+                                    class="dropdown-item text-danger" 
+                                    href="#" 
+                                    @click.prevent="clearBrowseCategory"
+                                >
+                                    清除選擇（顯示全部）
+                                </a>
+                            </div>
+                        </div>
+                        <small class="form-text text-muted">選擇類別後，可以繼續選擇子類別，或點擊「完成選擇」結束。點擊「清除選擇」可顯示全部物品。</small>
                     </div>
                     <div v-if="loading" class="text-center">
                         <div class="spinner-border" role="status"></div>
@@ -405,12 +449,12 @@
         </div>
 
         <!-- 上傳物品 Modal -->
-        <div class="modal fade" :class="{show: showUploadModal}" :style="{display: showUploadModal ? 'block' : 'none'}" tabindex="-1">
+        <div class="modal fade" :class="{show: showUploadModal}" :style="{display: showUploadModal ? 'block' : 'none'}" tabindex="-1" @click.self="categorySelector.showDropdown = false" @click.stop>
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title">上傳新物品</h5>
-                        <button type="button" class="btn-close" @click="showUploadModal = false"></button>
+                        <button type="button" class="btn-close" @click="showUploadModal = false; resetUploadForm()"></button>
                     </div>
                     <div class="modal-body">
                         <form @submit.prevent="handleUploadItem">
@@ -427,12 +471,74 @@
                                 <input type="number" class="form-control" v-model="uploadForm.out_duration" required>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label">類別 ID</label>
-                                <input type="number" class="form-control" v-model="uploadForm.c_id" required>
+                                <label class="form-label">類別</label>
+                                <div class="position-relative" @click.stop>
+                                    <input 
+                                        type="text" 
+                                        class="form-control" 
+                                        :value="categorySelector.displayText || '點擊選擇類別'" 
+                                        @click="onCategoryFieldClick(true, $event)"
+                                        @focus="onCategoryFieldClick(true, $event)"
+                                        readonly
+                                        required
+                                        placeholder="點擊選擇類別"
+                                    >
+                                    <div 
+                                        v-if="categorySelector.showDropdown && categorySelector.isUploadForm" 
+                                        class="dropdown-menu show position-absolute w-100" 
+                                        style="z-index: 1050; max-height: 300px; overflow-y: auto; top: 100%;"
+                                        @click.stop
+                                    >
+                                        <div v-if="categorySelector.currentSubcategories.length === 0 && categorySelector.selectedPath.length === 0" class="dropdown-item text-muted">
+                                            載入中...
+                                        </div>
+                                        <a 
+                                            v-for="cat in categorySelector.currentSubcategories" 
+                                            :key="cat.c_id"
+                                            class="dropdown-item" 
+                                            href="#" 
+                                            @click.prevent="selectCategory(cat)"
+                                        >
+                                            {{ cat.c_name }}
+                                        </a>
+                                        <div class="dropdown-divider" v-if="categorySelector.selectedPath.length > 0"></div>
+                                        <a 
+                                            class="dropdown-item text-muted" 
+                                            href="#" 
+                                            @click.prevent="finishCategorySelection"
+                                            v-if="categorySelector.selectedPath.length > 0"
+                                        >
+                                            完成選擇（使用當前類別）
+                                        </a>
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted">選擇類別後，可以繼續選擇子類別，或點擊「完成選擇」結束</small>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label">取貨地點 ID 列表 (用逗號分隔)</label>
-                                <input type="text" class="form-control" v-model="uploadForm.p_id_list_str" placeholder="例如: 1,2,3" required>
+                                <label class="form-label">取貨地點</label>
+                                <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                                    <div v-if="allPickupPlaces.length === 0" class="text-muted">
+                                        載入中...
+                                    </div>
+                                    <div v-else>
+                                        <div 
+                                            v-for="place in allPickupPlaces" 
+                                            :key="place.p_id"
+                                            class="form-check"
+                                        >
+                                            <input 
+                                                class="form-check-input" 
+                                                type="checkbox" 
+                                                :id="'upload-p-' + place.p_id"
+                                                :checked="isPickupPlaceSelected(place.p_id)"
+                                                @change="togglePickupPlace(place.p_id)"
+                                            >
+                                            <label class="form-check-label" :for="'upload-p-' + place.p_id">
+                                                {{ place.p_name }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <button type="submit" class="btn btn-primary">上傳</button>
                         </form>
@@ -443,12 +549,12 @@
         <div class="modal-backdrop fade" :class="{show: showUploadModal}" v-if="showUploadModal"></div>
 
         <!-- 編輯物品 Modal -->
-        <div class="modal fade" :class="{show: showEditModal}" :style="{display: showEditModal ? 'block' : 'none'}" tabindex="-1">
+        <div class="modal fade" :class="{show: showEditModal}" :style="{display: showEditModal ? 'block' : 'none'}" tabindex="-1" @click.self="categorySelector.showDropdown = false" @click.stop>
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title">編輯物品</h5>
-                        <button type="button" class="btn-close" @click="showEditModal = false"></button>
+                        <button type="button" class="btn-close" @click="showEditModal = false; resetCategorySelector()"></button>
                     </div>
                     <div class="modal-body">
                         <form @submit.prevent="handleUpdateItem">
@@ -465,12 +571,73 @@
                                 <input type="number" class="form-control" v-model="editForm.out_duration">
                             </div>
                             <div class="mb-3">
-                                <label class="form-label">類別 ID</label>
-                                <input type="number" class="form-control" v-model="editForm.c_id">
+                                <label class="form-label">類別</label>
+                                <div class="position-relative" @click.stop>
+                                    <input 
+                                        type="text" 
+                                        class="form-control" 
+                                        :value="categorySelector.displayText || '點擊選擇類別'" 
+                                        @click="onCategoryFieldClick(false, $event)"
+                                        @focus="onCategoryFieldClick(false, $event)"
+                                        readonly
+                                        placeholder="點擊選擇類別"
+                                    >
+                                    <div 
+                                        v-if="categorySelector.showDropdown && !categorySelector.isUploadForm" 
+                                        class="dropdown-menu show position-absolute w-100" 
+                                        style="z-index: 1050; max-height: 300px; overflow-y: auto; top: 100%;"
+                                        @click.stop
+                                    >
+                                        <div v-if="categorySelector.currentSubcategories.length === 0 && categorySelector.selectedPath.length === 0" class="dropdown-item text-muted">
+                                            載入中...
+                                        </div>
+                                        <a 
+                                            v-for="cat in categorySelector.currentSubcategories" 
+                                            :key="cat.c_id"
+                                            class="dropdown-item" 
+                                            href="#" 
+                                            @click.prevent="selectCategory(cat)"
+                                        >
+                                            {{ cat.c_name }}
+                                        </a>
+                                        <div class="dropdown-divider" v-if="categorySelector.selectedPath.length > 0"></div>
+                                        <a 
+                                            class="dropdown-item text-muted" 
+                                            href="#" 
+                                            @click.prevent="finishCategorySelection"
+                                            v-if="categorySelector.selectedPath.length > 0"
+                                        >
+                                            完成選擇（使用當前類別）
+                                        </a>
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted">選擇類別後，可以繼續選擇子類別，或點擊「完成選擇」結束</small>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label">取貨地點 ID 列表 (用逗號分隔)</label>
-                                <input type="text" class="form-control" v-model="editForm.p_id_list_str" placeholder="例如: 1,2,3">
+                                <label class="form-label">取貨地點</label>
+                                <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                                    <div v-if="allPickupPlaces.length === 0" class="text-muted">
+                                        載入中...
+                                    </div>
+                                    <div v-else>
+                                        <div 
+                                            v-for="place in allPickupPlaces" 
+                                            :key="place.p_id"
+                                            class="form-check"
+                                        >
+                                            <input 
+                                                class="form-check-input" 
+                                                type="checkbox" 
+                                                :id="'edit-p-' + place.p_id"
+                                                :checked="isPickupPlaceSelected(place.p_id)"
+                                                @change="togglePickupPlace(place.p_id)"
+                                            >
+                                            <label class="form-check-label" :for="'edit-p-' + place.p_id">
+                                                {{ place.p_name }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <button type="submit" class="btn btn-primary">更新</button>
                         </form>

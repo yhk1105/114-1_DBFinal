@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from app.services.item_service import get_item_detail, get_category_items, get_item_borrowed_time, upload_item, update_item, report_item, verify_item, get_subcategory_items
+from app.services.item_service import get_item_detail, get_category_items, get_item_borrowed_time, upload_item, update_item, report_item, verify_item, get_subcategory
 from app.mongodb.funnel_tracker import log_event
 item_bp = Blueprint("item", __name__)
 
@@ -60,19 +60,19 @@ def get_this_category_items(c_id):
 
 
 @item_bp.get("/item/category/<int:c_id>/subcategories")
-def get_this_subcategory_items(c_id):
+def get_this_subcategory(c_id):
     """
     處理取得特定類別的子類別請求。
     """
     try:
-        items = get_subcategory_items(c_id)
+        subcategories = get_subcategory(c_id)
         log_event(
             event_type='browse_subcategory',
             endpoint=f'/item/category/{c_id}/subcategories',
             success=True,
             category_id=c_id,
         )
-        return jsonify({"items": items}), 200
+        return jsonify({"subcategories": subcategories}), 200
     except Exception as e:
         log_event(
             event_type='browse_subcategory',

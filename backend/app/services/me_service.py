@@ -47,7 +47,8 @@ def get_profile_service(token: str):
                 WHERE m_id = :m_id
             """),
             {"m_id": user_id}).mappings().first()
-        return True, {"name": member_row["m_name"], "email": member_row["m_mail"], "owner_rate": member_row["owner_rate"], "borrower_rate": member_row["borrower_rate"]}
+        member_dict = dict(member_row)
+        return True, {"name": member_dict["m_name"], "email": member_dict["m_mail"], "owner_rate": member_dict["owner_rate"], "borrower_rate": member_dict["borrower_rate"]}
     elif active_role == "staff":
         staff_row = db.session.execute(
             text("""
@@ -56,7 +57,8 @@ def get_profile_service(token: str):
                 WHERE s_id = :s_id
             """),
             {"s_id": user_id}).mappings().first()
-        return True, {"name": staff_row["s_name"], "email": staff_row["s_mail"]}
+        staff_dict = dict(staff_row)
+        return True, {"name": staff_dict["s_name"], "email": staff_dict["s_mail"]}
 
 
 def get_my_items(token: str):
@@ -78,9 +80,12 @@ def get_my_items(token: str):
                 WHERE m_id = :m_id
             """),
             {"m_id": user_id}).mappings().all()
-        return True, {"items": items_row}
+        # 轉換為字典列表
+        items_list = [dict(row) for row in items_row]
+        return True, {"items": items_list}
     else:
         return False, "Only members can get items"
+
 
 def find_items(r_id: int):
     """
@@ -101,6 +106,8 @@ def find_items(r_id: int):
     for item in items_row:
         item_list.append(item["i_name"])
     return item_list
+
+
 def get_my_reservations(token: str):
     """
     處理取得使用者預約請求。
@@ -122,10 +129,12 @@ def get_my_reservations(token: str):
                 order by create_at desc
             """),
             {"m_id": user_id}).mappings().all()
-        for reservation in reservations_row:
+        # 轉換為字典列表
+        reservations_list = [dict(row) for row in reservations_row]
+        for reservation in reservations_list:
             reservation["items"] = find_items(reservation["r_id"])
-            
-        return True, {"reservations": reservations_row}
+
+        return True, {"reservations": reservations_list}
     else:
         return False, "Only members can get reservations"
 
@@ -154,7 +163,9 @@ def get_reservation_detail(token: str, r_id: int):
                 order by est_start_at asc
             """),
             {"r_id": r_id, "m_id": member_id}).mappings().all()
-        return True, {"reservation_details": reservation_detail_row}
+        # 轉換為字典列表
+        details_list = [dict(row) for row in reservation_detail_row]
+        return True, {"reservation_details": details_list}
     else:
         return False, "Only members can get reservation detail"
 
@@ -203,7 +214,9 @@ def get_reviewable_items(token: str):
                     )
             """),
             {"m_id": user_id}).mappings().all()
-        return True, {"reviewable_items": reviewable_items_row}
+        # 轉換為字典列表
+        reviewable_items_list = [dict(row) for row in reviewable_items_row]
+        return True, {"reviewable_items": reviewable_items_list}
     else:
         return False, "Only members can get reviewable items"
 
@@ -225,7 +238,7 @@ def review_item(token: str, l_id: int, data: dict):
     try:
         # 1. 查詢 Loan 資訊，確認使用者是否有權評論，並找出 reviewee_id
         loan_info = db.session.execute(
-        text("""
+            text("""
             SELECT 
                 r.m_id AS borrower_id,
                 i.m_id AS owner_id,
@@ -236,7 +249,7 @@ def review_item(token: str, l_id: int, data: dict):
             JOIN item i ON rd.i_id = i.i_id
             WHERE l.l_id = :l_id
         """),
-        {"l_id": l_id}
+            {"l_id": l_id}
         ).mappings().first()
         if not loan_info:
             return False, "Loan not found"
@@ -315,6 +328,9 @@ def get_contributions_and_bans(token: str):
                 WHERE m_id = :m_id
             """),
             {"m_id": user_id}).mappings().all()
-        return True, {"contributions": contributions_row, "bans": bans_row}
+        # 轉換為字典列表
+        contributions_list = [dict(row) for row in contributions_row]
+        bans_list = [dict(row) for row in bans_row]
+        return True, {"contributions": contributions_list, "bans": bans_list}
     else:
         return False, "Only members can get contributions and bans"

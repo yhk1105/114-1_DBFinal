@@ -1,14 +1,17 @@
 from flask import Flask
 from flask_cors import CORS
+from sqlalchemy import text, event
+from sqlalchemy.engine import Engine
 from .config import Config
-from sqlalchemy import text
-from .extensions import db
+from .extensions import db, init_mongo_client
 from .routes.auth import auth_bp
 from .routes.item import item_bp
 from .routes.me import me_bp
 from .routes.owner import owner_bp
 from .routes.reservation import reservation_bp
 from .routes.staff import staff_bp
+from .routes.pickup_places import pp_bp
+from .mongodb import init_mongodb
 
 
 def create_app():
@@ -20,14 +23,13 @@ def create_app():
 
     # 初始化 SQLAlchemy
     db.init_app(app)
+
+    # 初始化 MongoDB（類似 db 的處理方式）
+    init_mongo_client(app.config["MONGODB_URI"])
+
     with app.app_context():
-        try:
-            db.session.execute(text("SET search_path TO our_things"))
-            db.session.commit()
-        except Exception as e:
-            # 如果設定失敗，可能是資料庫尚未建立 schema
-            # 這不會阻止應用啟動，但需要確保 schema 已建立
-            app.logger.warning(f"無法設定 search_path: {e}")
+        # 初始化 MongoDB（建立索引、驗證連線）
+        init_mongodb(app)
 
     # 註冊 Blueprint
     app.register_blueprint(auth_bp)
@@ -36,5 +38,6 @@ def create_app():
     app.register_blueprint(owner_bp)
     app.register_blueprint(reservation_bp)
     app.register_blueprint(staff_bp)
+    app.register_blueprint(pp_bp)
 
     return app

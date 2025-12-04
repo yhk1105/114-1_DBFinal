@@ -27,7 +27,8 @@ def get_future_reservation_details(token: str):
             WHERE m_id = :m_id and (actual_return_at is null or actual_return_at is null)
             order by est_start_at asc
         """), {"m_id": m_id}).mappings().all()
-        return True, result
+        result_list = [dict(row) for row in result]
+        return True, {"result": result_list}
     return False, "Unauthorized"
 
 
@@ -40,7 +41,8 @@ def punch_in_loan(token: str, l_id: int, data: dict):
         return False, "Unauthorized"
     if active_role == "member":
         try:
-            db.session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+            db.session.execute(
+                text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
 
             # 使用更高精度的 timestamp (毫秒級) 避免衝突
             timestamp_ms = int(datetime.now().timestamp() * 1000)

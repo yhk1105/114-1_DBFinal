@@ -3,7 +3,7 @@
 用於記錄用戶從查詢到預約的完整流程
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import request
 from app.mongodb.connection import get_mongo_db
 from app.utils.jwt_utils import get_user
@@ -49,13 +49,13 @@ def get_or_create_session(session_id, user_token=None, m_id=None):
             "m_id": m_id,
             "events": [],
             "funnel_stage": None,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc)
         }
         user_sessions.insert_one(session)
     else:
         # 更新現有 session（如果有新的 token 或 m_id）
-        update_data = {"updated_at": datetime.utcnow()}
+        update_data = {"updated_at": datetime.now(timezone.utc)}
         if user_token and not session.get("user_token"):
             update_data["user_token"] = user_token
         if m_id and not session.get("m_id"):
@@ -107,7 +107,7 @@ def log_event(event_type, endpoint, success=True, error_reason=None, **kwargs):
         # 建立事件
         event = {
             "event_type": event_type,
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime.now(timezone.utc),
             "endpoint": endpoint,
             "success": success,
             "error_reason": error_reason,
@@ -127,7 +127,7 @@ def log_event(event_type, endpoint, success=True, error_reason=None, **kwargs):
                 "$push": {"events": event},
                 "$set": {
                     "funnel_stage": funnel_stage,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.now(timezone.utc)
                 }
             }
         )

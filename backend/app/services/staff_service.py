@@ -46,7 +46,7 @@ def get_not_deal_reports(token: str):
             text("""
                 SELECT re_id, comment, create_at, conclude_at, m_id, i_id
                 FROM report
-                WHERE s_id = :user_id and r_conclusion is null
+                WHERE s_id = :user_id and r_conclusion = 'Pending'
             """),
             {"user_id": s_id}
         ).mappings().all()
@@ -76,7 +76,7 @@ def conclude_report(token: str, re_id: int, data: dict):
                 SELECT r.i_id, i.c_id, r.m_id, i.i_name
                 FROM report r
                 JOIN item i ON r.i_id = i.i_id
-                LEFT JOIN contribution c ON c.m_id = r.m_id AND c.i_id = i.i_id
+                JOIN contribution c ON c.i_id = i.i_id
                 WHERE re_id = :re_id
                 FOR UPDATE OF r, i, c
             """), {"re_id": re_id}).mappings().first()
@@ -94,9 +94,11 @@ def conclude_report(token: str, re_id: int, data: dict):
             """),
                                {"r_conclusion": data["r_conclusion"], "conclude_at": datetime.now(), "re_id": re_id})
 
-            target_m_id = report_dict["m_id"]
             target_c_id = report_dict["c_id"]
             target_i_id = report_dict["i_id"]
+            target_m_id = db.session.execute(text("""
+                SELECT m_id FROM item WHERE i_id = :i_id
+            """), {"i_id": target_i_id}).scalar()
 
             # 3. 處理 Ban Category
             if data["r_conclusion"] == "Ban Category":
@@ -108,6 +110,7 @@ def conclude_report(token: str, re_id: int, data: dict):
                     SET is_deleted = false, ban_at = EXCLUDED.ban_at, s_id = EXCLUDED.s_id
                 """),
                                    {"s_id": s_id, "c_id": target_c_id, "m_id": target_m_id, "ban_at": datetime.now()})
+                
             deleted_reservations = []
             # 4. 處理 Delist 或 Ban Category (都需要下架商品)
             if data["r_conclusion"] in ["Delist", "Ban Category"]:
@@ -169,6 +172,7 @@ def conclude_report(token: str, re_id: int, data: dict):
 
             return True, {"message": msg}
         except Exception as e:
+            print(e)
             db.session.rollback()
             return False, {"message": str(e)}
 
@@ -214,11 +218,10 @@ def conclude_verification(token: str, iv_id: int, data: dict):
             """))
             db.session.execute(text("""
                 UPDATE item_verification
-                SET v_conclusion = :v_conclusion, conclude_at = :conclude_at
+                SET v_conclusion = :v_conclusion
                 WHERE iv_id = :iv_id
             """),
-                               {"v_conclusion": data["v_conclusion"], "conclude_at": datetime.now(
-                               ), "iv_id": iv_id}
+                               {"v_conclusion": data["v_conclusion"], "iv_id": iv_id}
                                )
             result = db.session.execute(text("""
                     SELECT m_id, item.i_id 
@@ -262,5 +265,6 @@ def conclude_verification(token: str, iv_id: int, data: dict):
 
             return True, {"message": "Success"}
         except Exception as e:
+            print(e)
             return False, {"message": str(e)}
     return False, {"message": "Unauthorized"}

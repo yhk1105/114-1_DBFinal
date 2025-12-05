@@ -301,6 +301,7 @@ createApp({
             reports: [],
             categories: [],
             selectedCategory: '',
+            ownerReservations: [], // 物主的未來預約詳情
             
             // 表單
             uploadForm: {
@@ -349,16 +350,19 @@ createApp({
             },
             // 取貨地點列表
             allPickupPlaces: [],
+            // 待借清單（類似購物車）
+            wishlist: [], // [{i_id, i_name, status, description, out_duration, c_id}, ...]
+            showWishlist: false, // 是否顯示待借清單側邊欄
+            // 個人資料
+            profileData: {
+                name: '',
+                email: '',
+                owner_rate: null,
+                borrower_rate: null
+            },
+            showProfileModal: false,
             reservationForm: {
-                rd_list: [{
-                    i_id: '',
-                    i_name: '',
-                    p_id: '',
-                    pickup_places: [], // 該物品的取貨地點列表
-                    borrowed_times: [], // 該物品已被預約的時段
-                    est_start_at: '',
-                    est_due_at: ''
-                }]
+                rd_list: []
             },
             reviewForm: {
                 l_id: null,
@@ -461,8 +465,40 @@ createApp({
             this.showSuccess('已登出');
         },
         
-        showProfile() {
-            alert(`使用者名稱: ${this.userName}\n角色: ${this.userRole === 'member' ? '會員' : '員工'}`);
+        async showProfile() {
+            try {
+                this.loading = true;
+                const result = await api.getProfile();
+                console.log('個人資料 API 返回:', result);
+                
+                const data = result || {};
+                // 確保評分是數字或 null
+                const ownerRate = data.owner_rate !== null && data.owner_rate !== undefined 
+                    ? (typeof data.owner_rate === 'string' ? parseFloat(data.owner_rate) : data.owner_rate)
+                    : null;
+                const borrowerRate = data.borrower_rate !== null && data.borrower_rate !== undefined
+                    ? (typeof data.borrower_rate === 'string' ? parseFloat(data.borrower_rate) : data.borrower_rate)
+                    : null;
+                
+                this.profileData = {
+                    name: data.name || this.userName,
+                    email: data.email || '',
+                    owner_rate: ownerRate,
+                    borrower_rate: borrowerRate
+                };
+                console.log('處理後的個人資料:', this.profileData);
+                this.showProfileModal = true;
+            } catch (error) {
+                console.error('取得個人資料失敗:', error);
+                console.error('錯誤詳情:', error.response);
+                this.showError(error.response?.data?.error || error.message || '取得個人資料失敗');
+            } finally {
+                this.loading = false;
+            }
+        },
+        
+        closeProfileModal() {
+            this.showProfileModal = false;
         },
         
         goToHome() {
@@ -780,6 +816,82 @@ createApp({
             }
         },
         
+        // 加入待借清單
+        addToWishlist(item) {
+            console.log('addToWishlist 被調用:', item);
+            
+            if (!item) {
+                console.error('item 為空');
+                this.showError('無法加入待借清單：物品資訊不完整');
+                return;
+            }
+            
+            // 檢查是否已經在待借清單中
+            const exists = this.wishlist.find(w => w.i_id === item.i_id);
+            if (exists) {
+                this.showError('此物品已在待借清單中');
+                return;
+            }
+            
+            // 檢查物品是否可預約
+            if (item.status !== 'Reservable') {
+                this.showError('此物品目前無法預約');
+                return;
+            }
+            
+            // 加入待借清單
+            this.wishlist.push({
+                i_id: item.i_id,
+                i_name: item.i_name,
+                status: item.status,
+                description: item.description,
+                out_duration: item.out_duration,
+                c_id: item.c_id
+            });
+            
+            console.log('待借清單更新後:', this.wishlist);
+            this.showSuccess(`「${item.i_name}」已加入待借清單`);
+        },
+        
+        // 從待借清單移除
+        removeFromWishlist(i_id) {
+            const index = this.wishlist.findIndex(w => w.i_id === i_id);
+            if (index > -1) {
+                const itemName = this.wishlist[index].i_name;
+                this.wishlist.splice(index, 1);
+                this.showSuccess(`「${itemName}」已從待借清單移除`);
+            }
+        },
+        
+        // 從待借清單建立預約
+        async createReservationFromWishlist() {
+            if (this.wishlist.length === 0) {
+                this.showError('待借清單是空的');
+                return;
+            }
+            
+            // 初始化預約表單，為每個待借物品創建一個預約詳情
+            this.reservationForm.rd_list = this.wishlist.map(item => ({
+                i_id: item.i_id,
+                i_name: item.i_name,
+                p_id: '',
+                pickup_places: [],
+                borrowed_times: [],
+                loadingPickupPlaces: false,
+                loadingBorrowedTimes: false,
+                est_start_at: '',
+                est_due_at: ''
+            }));
+            
+            this.showReservationModal = true;
+            this.showWishlist = false; // 關閉待借清單側邊欄
+            
+            // 為每個物品載入取貨地點和借用時間
+            for (let i = 0; i < this.reservationForm.rd_list.length; i++) {
+                await this.loadReservationItemData(i);
+            }
+        },
+        
         async addToReservationList(item) {
             this.currentReservationItem = item;
             // 初始化預約表單
@@ -789,6 +901,8 @@ createApp({
                 p_id: '',
                 pickup_places: [],
                 borrowed_times: [],
+                loadingPickupPlaces: false,
+                loadingBorrowedTimes: false,
                 est_start_at: '',
                 est_due_at: ''
             }];
@@ -830,12 +944,15 @@ createApp({
         },
         
         addReservationItem() {
+            // 手動添加物品到預約表單（用於不在待借清單中的物品）
             this.reservationForm.rd_list.push({
                 i_id: '',
                 i_name: '',
                 p_id: '',
                 pickup_places: [],
                 borrowed_times: [],
+                loadingPickupPlaces: false,
+                loadingBorrowedTimes: false,
                 est_start_at: '',
                 est_due_at: ''
             });
@@ -876,10 +993,27 @@ createApp({
                 
                 await api.createReservation(rd_list);
                 this.showReservationModal = false;
+                
+                // 從待借清單中移除已預約的物品
+                const reservedItemIds = rd_list.map(rd => rd.i_id);
+                this.wishlist = this.wishlist.filter(item => !reservedItemIds.includes(item.i_id));
+                
                 this.showSuccess('預約成功！');
                 await this.loadMyReservations();
             } catch (error) {
-                this.showError(error.response?.data?.error || '預約失敗');
+                // 調試：記錄完整的錯誤信息
+                console.error('預約失敗錯誤:', error);
+                console.error('錯誤響應:', error.response);
+                console.error('錯誤數據:', error.response?.data);
+                
+                // 嘗試多種方式取得錯誤訊息
+                const errorMessage = error.response?.data?.error 
+                    || error.response?.data?.message 
+                    || error.message 
+                    || '預約失敗';
+                
+                console.log('顯示的錯誤訊息:', errorMessage);
+                this.showError(errorMessage);
             } finally {
                 this.loading = false;
             }
@@ -1089,6 +1223,42 @@ createApp({
             setTimeout(() => {
                 this.successMessage = '';
             }, 3000);
+        },
+        
+        // 物主功能
+        async loadOwnerReservations() {
+            try {
+                this.loading = true;
+                const result = await api.getFutureReservationDetails();
+                // 後端返回格式: {"result": {"result": [...]}}
+                // owner_service.py 返回 True, {"result": result_list}
+                // routes/owner.py 包裝成 {"result": {"result": result_list}}
+                this.ownerReservations = result.result?.result || [];
+            } catch (error) {
+                console.error('載入借出物品失敗:', error);
+                this.showError(error.response?.data?.error || '載入失敗');
+            } finally {
+                this.loading = false;
+            }
+        },
+        
+        async handlePunchIn(l_id, event_type) {
+            const actionName = event_type === 'Handover' ? '交貨' : '歸還';
+            if (!confirm(`確定要進行「${actionName}打卡」嗎？`)) {
+                return;
+            }
+            
+            try {
+                this.loading = true;
+                await api.punchInLoan(l_id, event_type);
+                this.showSuccess(`${actionName}打卡成功！`);
+                await this.loadOwnerReservations(); // 重新載入列表
+            } catch (error) {
+                console.error('打卡失敗:', error);
+                this.showError(error.response?.data?.error || '打卡失敗');
+            } finally {
+                this.loading = false;
+            }
         },
         
         // 類別選擇器相關方法
@@ -1315,6 +1485,8 @@ createApp({
                 } else if (this.recordsTab === 'contributions') {
                     this.loadContributions();
                 }
+            } else if (newView === 'ownerReservations') {
+                this.loadOwnerReservations();
             } else if (newView === 'staffVerification') {
                 this.loadVerifications();
             } else if (newView === 'staffReports') {

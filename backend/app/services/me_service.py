@@ -20,35 +20,49 @@ def get_profile_service(token: str):
         member_row = db.session.execute(
             text("""
                 with owner_rate as(
-                    SELECT owner.m_id, AVG(review.score) as owner_rate
-                    FROM member as owner
-                    join review on owner.m_id = review.reviewee_id
-                    join loan on review.l_id = loan.l_id
-                    join reservation on loan.rd_id = reservation.rd_id
-                    join reservation_detail on reservation.r_id = reservation_detail.r_id
-                    join item on reservation_detail.i_id = item.i_id
-                    join category on item.c_id = category.c_id
-                    WHERE owner.m_id = :m_id
-                    group by owner.m_id
+                    SELECT i.m_id, AVG(rv.score) as owner_rate
+                    FROM review rv
+                    join loan l on rv.l_id = l.l_id
+                    join reservation_detail rd on l.rd_id = rd.rd_id
+                    join item i on rd.i_id = i.i_id
+                    WHERE rv.reviewee_id = :m_id AND i.m_id = :m_id AND rv.is_deleted = false
+                    group by i.m_id
                 ),
                 borrower_rate as(
-                    SELECT borrower.m_id, AVG(review.score) as borrower_rate
-                    FROM member as borrower
-                    join review on borrower.m_id = review.reviewee_id
-                    join loan on review.l_id = loan.l_id
-                    join reservation on loan.rd_id = reservation.rd_id and reservation.m_id = :m_id
-                    where borrower.m_id = :m_id
-                    group by borrower.m_id
+                    SELECT r.m_id, AVG(rv.score) as borrower_rate
+                    FROM review rv
+                    join loan l on rv.l_id = l.l_id
+                    join reservation_detail rd on l.rd_id = rd.rd_id
+                    join reservation r on rd.r_id = r.r_id
+                    WHERE rv.reviewee_id = :m_id AND r.m_id = :m_id AND rv.is_deleted = false
+                    group by r.m_id
                 )
-                SELECT m_name, m_mail, owner_rate, borrower_rate
-                FROM member
-                join owner_rate on member.m_id = owner_rate.m_id
-                join borrower_rate on member.m_id = borrower_rate.m_id
-                WHERE m_id = :m_id
+                SELECT m.m_name, m.m_mail, 
+                       owner_rate.owner_rate, 
+                       borrower_rate.borrower_rate
+                FROM member m
+                LEFT JOIN owner_rate on m.m_id = owner_rate.m_id
+                LEFT JOIN borrower_rate on m.m_id = borrower_rate.m_id
+                WHERE m.m_id = :m_id
             """),
             {"m_id": user_id}).mappings().first()
+
+        if not member_row:
+            return False, "Member not found"
+
         member_dict = dict(member_row)
-        return True, {"name": member_dict["m_name"], "email": member_dict["m_mail"], "owner_rate": member_dict["owner_rate"], "borrower_rate": member_dict["borrower_rate"]}
+        # 確保評分是 float 或 None
+        owner_rate = float(
+            member_dict["owner_rate"]) if member_dict["owner_rate"] is not None else None
+        borrower_rate = float(
+            member_dict["borrower_rate"]) if member_dict["borrower_rate"] is not None else None
+
+        return True, {
+            "name": member_dict["m_name"],
+            "email": member_dict["m_mail"],
+            "owner_rate": owner_rate,
+            "borrower_rate": borrower_rate
+        }
     elif active_role == "staff":
         staff_row = db.session.execute(
             text("""
@@ -122,11 +136,13 @@ def get_my_reservations(token: str):
     if active_role == "member":
         reservations_row = db.session.execute(
             text("""
-                SELECT r_id, create_at
-                FROM reservation
-                WHERE m_id = :m_id
-                and is_deleted = false
-                order by create_at desc
+                SELECT r.r_id, r.create_at
+                FROM reservation r
+                join reservation_detail rd on r.r_id = rd.r_id
+                join loan l on rd.rd_id = l.rd_id
+                WHERE r.m_id = :m_id and l.actual_return_at is null
+                and r.is_deleted = false
+                order by r.create_at desc
             """),
             {"m_id": user_id}).mappings().all()
         # 轉換為字典列表
@@ -153,13 +169,13 @@ def get_reservation_detail(token: str, r_id: int):
     if active_role == "member":
         reservation_detail_row = db.session.execute(
             text("""
-                SELECT est_start_at, est_due_at, i_name, p_name
-                FROM reservation_detail
-                join item on reservation_detail.i_id = item.i_id
-                join reservation on reservation_detail.r_id = reservation.r_id
-                join pick_up_place on reservation_detail.p_id = pick_up_place.p_id
-                WHERE r_id = :r_id and reservation.m_id = :m_id
-                and reservation.is_deleted = false
+                SELECT rd.est_start_at, rd.est_due_at, i.i_name, p.p_name
+                FROM reservation_detail rd
+                join item i on rd.i_id = i.i_id
+                join reservation r on rd.r_id = r.r_id
+                join pick_up_place p on rd.p_id = p.p_id
+                WHERE rd.r_id = :r_id and r.m_id = :m_id
+                and r.is_deleted = false
                 order by est_start_at asc
             """),
             {"r_id": r_id, "m_id": member_id}).mappings().all()
@@ -285,18 +301,17 @@ def review_item(token: str, l_id: int, data: dict):
             comment=data["comment"],
             reviewer_id=user_id,
             reviewee_id=reviewee_id,
-            l_id=l_id
+            l_id=l_id,
+            is_deleted=False
         )
         db.session.add(new_review)
 
         db.session.commit()
         return True, {"review_id": new_review.review_id}
-    except IntegrityError:
-        db.session.rollback()
-        # 這裡就代表 UNIQUE(l_id, reviewer_id) 被觸發 → 使用者之前已經評過
-        return False, "You have already reviewed this loan"
+
     except Exception as e:
-        db. session.rollback()
+        db.session.rollback()
+        print(e)
         return False, str(e)
 
 

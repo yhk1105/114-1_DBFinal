@@ -4,6 +4,7 @@ from app.mongodb.funnel_tracker import log_event
 
 reservation_bp = Blueprint("reservation", __name__)
 
+
 @reservation_bp.post("/reservation/create")
 def create_this_reservation():
     """
@@ -23,15 +24,18 @@ def create_this_reservation():
             reservation_id=result["r_id"],
         )
     if not ok:
+        print(result)
         log_event(
             event_type='create_reservation',
             endpoint=f'/reservation/create',
             success=False,
             error_reason=result,
-            item_ids=[rd.get('i_id') for rd in data.get('rd_list', [])] if isinstance(data, dict) else []
+            item_ids=[rd.get('i_id') for rd in data.get(
+                'rd_list', [])] if isinstance(data, dict) else []
         )
         return jsonify({"error": result}), 401
     return jsonify({"result": result}), 200
+
 
 @reservation_bp.delete("/reservation/delete/<int:r_id>")
 def delete_this_reservation(r_id):
@@ -47,6 +51,7 @@ def delete_this_reservation(r_id):
         return jsonify({"error": result}), 401
     return jsonify({"result": result}), 200
 
+
 @reservation_bp.get("/reservation/<int:i_id>/pickup_places")
 def get_this_pickup_places(i_id):
     """
@@ -60,4 +65,3 @@ def get_this_pickup_places(i_id):
         item_id=i_id,
     )
     return jsonify({"pickup_places": pickup_places}), 200
-

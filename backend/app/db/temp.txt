@@ -1,3 +1,271 @@
+-- 建立 schema
+
+-- 建立資料表
+CREATE TABLE member (
+    m_id BIGSERIAL PRIMARY KEY,
+    m_name VARCHAR(20) NOT NULL UNIQUE,
+    m_mail VARCHAR(60) NOT NULL UNIQUE,
+    m_password VARCHAR(255) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE category (
+    c_id BIGSERIAL PRIMARY KEY,
+    c_name VARCHAR(20) NOT NULL,
+    parent_c_id BIGINT,
+    CONSTRAINT fk_category_parent
+        FOREIGN KEY (parent_c_id)
+        REFERENCES category(c_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE staff (
+    s_id BIGSERIAL PRIMARY KEY,
+    s_name VARCHAR(20) NOT NULL,
+    s_mail VARCHAR(60) NOT NULL UNIQUE,
+    s_password VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL CHECK(role IN ('Employee', 'Manager')),
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+
+
+CREATE TABLE pick_up_place (
+    p_id BIGSERIAL PRIMARY KEY,
+    p_name VARCHAR(100) NOT NULL,
+    address VARCHAR(100) NOT NULL,
+    note VARCHAR(200),
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE item (
+    i_id BIGSERIAL PRIMARY KEY,
+    i_name VARCHAR(20) NOT NULL,
+    status VARCHAR(15) NOT NULL 
+        CHECK (status IN ('Borrowed','Reservable','Not reservable', 'Not verified')),
+    description VARCHAR(200),
+    out_duration INT NOT NULL,
+    m_id BIGINT NOT NULL,
+    c_id BIGINT NOT NULL,
+    CONSTRAINT fk_item_member
+        FOREIGN KEY (m_id)
+        REFERENCES member(m_id)
+        ON DELETE NO ACTION
+        ON UPDATE CASCADE,
+    CONSTRAINT fk_item_category
+        FOREIGN KEY (c_id)
+        REFERENCES category(c_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE item_pick (
+    i_id BIGINT NOT NULL,
+    p_id BIGINT NOT NULL,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (i_id, p_id),
+
+    FOREIGN KEY (i_id)
+        REFERENCES item(i_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (p_id)
+        REFERENCES pick_up_place(p_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE item_photo (
+    seq_no INT NOT NULL,
+    i_id BIGINT NOT NULL,
+    file_path VARCHAR(100) NOT NULL, --不知道夠不夠長
+    upload_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (seq_no, i_id),
+
+    FOREIGN KEY (i_id)
+        REFERENCES item(i_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE item_verification (
+    iv_id BIGSERIAL PRIMARY KEY,
+    v_conclusion VARCHAR(10) CHECK(v_conclusion IN ('Pass','Fail','Pending')),
+    create_at TIMESTAMP NOT NULL,
+    i_id BIGINT NOT NULL,
+    s_id BIGINT NOT NULL DEFAULT 0,
+
+    FOREIGN KEY (i_id)
+        REFERENCES item(i_id)
+        ON DELETE NO ACTION
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (s_id)
+        REFERENCES staff(s_id)
+        ON DELETE SET DEFAULT
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE reservation (
+    r_id BIGSERIAL PRIMARY KEY,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    create_at TIMESTAMP NOT NULL,
+    m_id BIGINT NOT NULL,
+
+    FOREIGN KEY (m_id)
+        REFERENCES member(m_id)
+        ON DELETE NO ACTION
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE reservation_detail (
+    rd_id BIGSERIAL PRIMARY KEY,
+    est_start_at TIMESTAMP NOT NULL,
+    est_due_at TIMESTAMP NOT NULL,
+    r_id BIGINT NOT NULL,
+    i_id BIGINT NOT NULL,
+    p_id BIGINT NOT NULL,
+
+    FOREIGN KEY (r_id)
+        REFERENCES reservation(r_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (i_id)
+        REFERENCES item(i_id)
+        ON DELETE NO ACTION
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (p_id)
+        REFERENCES pick_up_place(p_id)
+        ON DELETE NO ACTION
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE contribution (
+    m_id BIGINT NOT NULL,
+    i_id BIGINT NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (m_id, i_id),
+
+    FOREIGN KEY (m_id)
+        REFERENCES member(m_id)
+        ON DELETE NO ACTION
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (i_id)
+        REFERENCES item(i_id)
+        ON DELETE NO ACTION
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE category_ban (
+    s_id BIGINT NOT NULL DEFAULT 0,
+    c_id BIGINT NOT NULL,
+    m_id BIGINT NOT NULL,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    ban_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (c_id, m_id),
+
+    FOREIGN KEY (s_id)
+        REFERENCES staff(s_id)
+        ON DELETE SET DEFAULT
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (c_id)
+        REFERENCES category(c_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (m_id)
+        REFERENCES member(m_id)
+        ON DELETE NO ACTION
+        ON UPDATE CASCADE
+);
+
+-- 'Withdraw'（不對該使用者懲處）,'Ban Category' （禁止他借用這個類別，同時下架該商品）,'Delist'（下架該商品就好）,'Pending'（等待員工查驗）
+CREATE TABLE report (
+    re_id BIGSERIAL PRIMARY KEY,
+    comment VARCHAR(200) NOT NULL,
+    r_conclusion VARCHAR(20) CHECK(r_conclusion IN ('Withdraw','Ban Category','Delist','Pending')),
+    create_at TIMESTAMP NOT NULL,
+    conclude_at TIMESTAMP,
+    m_id BIGINT NOT NULL,
+    i_id BIGINT NOT NULL,
+    s_id BIGINT NOT NULL DEFAULT 0,
+
+    FOREIGN KEY (m_id)
+        REFERENCES member(m_id)
+        ON DELETE NO ACTION
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (i_id)
+        REFERENCES item(i_id)
+        ON DELETE NO ACTION
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (s_id)
+        REFERENCES staff(s_id)
+        ON DELETE SET DEFAULT
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE loan (
+    l_id BIGSERIAL PRIMARY KEY,
+    rd_id BIGINT NOT NULL UNIQUE,
+    actual_start_at TIMESTAMP,
+    actual_return_at TIMESTAMP,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+
+    FOREIGN KEY (rd_id)
+        REFERENCES reservation_detail(rd_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE loan_event (
+    timestamp BIGINT NOT NULL,
+    event_type VARCHAR(20) NOT NULL 
+        CHECK (event_type IN ('Handover','Extend','Mark_overdue','Return')),
+    l_id BIGINT NOT NULL,
+    PRIMARY KEY (timestamp, l_id),
+
+    FOREIGN KEY (l_id)
+        REFERENCES loan(l_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+
+CREATE TABLE review (
+    review_id BIGSERIAL PRIMARY KEY,
+    score INT NOT NULL CHECK(score BETWEEN 1 AND 5),
+    comment VARCHAR(200) NOT NULL,
+    reviewer_id BIGINT NOT NULL,
+    reviewee_id BIGINT NOT NULL,
+    l_id BIGINT NOT NULL,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+
+    FOREIGN KEY (reviewer_id)
+        REFERENCES member(m_id)
+        ON DELETE NO ACTION
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (reviewee_id)
+        REFERENCES member(m_id)
+        ON DELETE NO ACTION
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (l_id)
+        REFERENCES loan(l_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+    CONSTRAINT uniq_review_per_loan_reviewer
+    UNIQUE (reviewer_id, l_id)
+);
+
+
 -- SELECT current_database();
 
 INSERT INTO member (m_id, m_name, m_mail, m_password, is_active)
@@ -9,7 +277,7 @@ VALUES
 (5, 'lucywang0515', 'lucy0515@ntu.edu.tw', 'scrypt:32768:8:1$m1uvOWd8DrPn3XNE$01ccffe3ecbe321edce0ea2c09e16e1e0347f0db362eed21813fd70ff9b3fbed3a32940512b71dba89ad50d4402901cd5a713ee98b2f460923a0166a6f6052d0', TRUE),
 (6, 'kevin8899', 'kevin8899@ntu.edu.tw', 'scrypt:32768:8:1$qqBhtv9tfsjHP2YQ$9c44eda39fbb52c49526d2287007f86c9537c73d9f1aadbbc5b45f8036f531e300239679f07fd9e5e586f69f0c7a393f2e31aa2e59ea2dc5b2d5a3c7fe710547', FALSE),
 (7, 'tina0724', 'tina0724@ntu.edu.tw', 'scrypt:32768:8:1$pX3Qcdkzmxum9DNv$b02f6ccd76fadf55aea70493d0f9abedffd44e858ef250121303fa314adb6c60f158f49c192ec35b1ddf92a46d58c03e7052611cc3df34a44942fa0126d7a491', TRUE),
-(8, 'jason.y', 'jason.work2020@ntu.edu.tw', 'scrypt:32768:8:1$hKAvjfEdgo5V88Fe$8ed4560ae9111f0028aa3f53bfb9eafbc1f9f1ea5d5e5084dbc75e3bebf2133c5964f1bb4c5c65b2a19948c433887dca0933f80ac087c693be2c6f53cf99deac', TRUE),
+(8, 'jason.y', 'jason.work2020@ntu.edu.tw', 'scrypt:32768:8:1$L0Jpv1AQUGKpTYIZ$a489e9b0628f253fa8f00b0ffaa090b3ebbe0861a790e602bf34f44f6a311ccb72a3abc7cfd55f17a9ee41323f96256df0a345be45733a2ece3d4805f45015b8', TRUE),
 (9, 'amy1010', 'amy1010@ntu.edu.tw', 'scrypt:32768:8:1$t4RaWXrm50qb7IVM$7d95d2d824bb8a7e39fbbd304cc5ff5f965391dede158dfe0014816b9070b9c36ef94bd697d9e19318656a1aac77716a9553f19c088148f7934e9b2eeee21eae', FALSE),
 (10, 'brian.T.10', 'brian1017@ntu.edu.tw', 'scrypt:32768:8:1$YXfSRBVcODv0ZK7E$ea2918b0eccc62d587e25926a34570c6c093a03866f328f45d98004a4e3d8a9928942f8cb8b073682365f3e66a59bb515072d958067319d1eb401059c902b851', TRUE);
 
@@ -368,3 +636,64 @@ INSERT INTO contribution (m_id, i_id, is_active) VALUES
 
 INSERT INTO category_ban (s_id, c_id, m_id, is_deleted, ban_at) VALUES
 (2, 9, 10, FALSE, '2025-11-30 15:30');
+-- MEMBER
+SELECT setval(
+  'member_m_id_seq',
+  COALESCE((SELECT MAX(m_id) FROM member), 1)
+);
+
+-- CATEGORY
+SELECT setval(
+  'category_c_id_seq',
+  COALESCE((SELECT MAX(c_id) FROM category), 1)
+);
+-- STAFF
+SELECT setval(
+  'staff_s_id_seq',
+  COALESCE((SELECT MAX(s_id) FROM staff), 1)
+);
+
+-- PICK_UP_PLACE
+SELECT setval(
+  'pick_up_place_p_id_seq',
+  COALESCE((SELECT MAX(p_id) FROM pick_up_place), 1)
+);
+-- ITEM
+SELECT setval(
+  'item_i_id_seq',
+  COALESCE((SELECT MAX(i_id) FROM item), 1)
+);
+
+-- ITEM_VERIFICATION
+SELECT setval(
+  'item_verification_iv_id_seq',
+  COALESCE((SELECT MAX(iv_id) FROM item_verification), 1)
+);
+
+-- RESERVATION
+SELECT setval(
+  'reservation_r_id_seq',
+  COALESCE((SELECT MAX(r_id) FROM reservation), 1)
+);
+
+-- RESERVATION_DETAIL
+SELECT setval(
+  'reservation_detail_rd_id_seq',
+  COALESCE((SELECT MAX(rd_id) FROM reservation_detail), 1)
+);
+
+--report
+SELECT setval(
+  'report_re_id_seq',
+  COALESCE((SELECT MAX(re_id) FROM report), 1)
+);
+--loan
+SELECT setval(
+  'loan_l_id_seq',
+  COALESCE((SELECT MAX(l_id) FROM loan), 1)
+);
+--review
+SELECT setval(
+  'review_review_id_seq',
+  COALESCE((SELECT MAX(review_id) FROM review), 1)
+);

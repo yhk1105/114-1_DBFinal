@@ -43,16 +43,17 @@ def change_contribution(session, m_id: int, i_id: int) -> bool:
     # 1. 取得物品資訊並鎖定
     item_original = session.execute(
         text("""
-            SELECT i_id, i_name, status, description, out_duration, c_id, is_active
+            SELECT i.i_id, i.i_name, i.status, i.description, i.out_duration, i.c_id, c.is_active
             FROM item i
-            JOIN contribution c ON item.i_id = contribution.i_id
-            WHERE item.i_id = :i_id AND item.m_id = :user_id
+            JOIN contribution c ON i.i_id = c.i_id
+            WHERE i.i_id = :i_id AND i.m_id = :user_id
             FOR UPDATE OF i, c
         """),
         {"i_id": i_id, "user_id": m_id}
     ).mappings().first()
 
     if not item_original:
+        print(1)
         return False
 
     # 2. 檢查當前 contribution 的狀態
@@ -66,6 +67,7 @@ def change_contribution(session, m_id: int, i_id: int) -> bool:
     }).mappings().first()
 
     if not check_this_contribution:
+        print(2)
         return False
 
     is_active = check_this_contribution["is_active"]
@@ -81,12 +83,12 @@ def change_contribution(session, m_id: int, i_id: int) -> bool:
     # 5. 檢查用戶在該 root category 及其所有子類別下是否有其他 active contribution
     check_root_category_contribution = session.execute(
         text("""
-            SELECT contribution.i_id
+            SELECT c.i_id
             FROM contribution c
-            JOIN item ON contribution.i_id = item.i_id
-            WHERE contribution.m_id = :m_id
-            AND contribution.is_active = true
-            AND contribution.i_id != :current_i_id
+            JOIN item ON c.i_id = item.i_id
+            WHERE c.m_id = :m_id
+            AND c.is_active = true
+            AND c.i_id != :current_i_id
             AND item.c_id IN (
                 -- 找到 root category 下的所有子類別（包括 root 自己）
                 WITH RECURSIVE category_tree AS (
@@ -114,6 +116,7 @@ def change_contribution(session, m_id: int, i_id: int) -> bool:
 
     # 6. 如果沒有找到其他 active contribution，無法啟用（需要至少一個 active）
     if not check_root_category_contribution:
+        print(3)
         return False
 
     # 7. 如果找到了，將舊的設為 inactive，將新的設為 active

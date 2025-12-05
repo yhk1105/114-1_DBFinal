@@ -19,13 +19,14 @@ def get_future_reservation_details(token: str):
         create_loan_for_upcoming_reservations(hours_ahead=24)
 
         result = db.session.execute(text("""
-            SELECT l_id, i_id, m_name, est_start_at, est_return_at
-            FROM reservation_detail
-            join loan on reservation_detail.rd_id = loan.rd_id
-            join item on reservation_detail.i_id = item.i_id
-            join member on item.m_id = member.m_id
-            WHERE m_id = :m_id and (actual_return_at is null or actual_return_at is null)
-            order by est_start_at asc
+            SELECT l.l_id, i.i_id, m.m_name, rd.est_start_at, rd.est_due_at
+            FROM reservation_detail rd
+            join reservation r on rd.r_id = r.r_id
+            join loan l on rd.rd_id = l.rd_id
+            join item i on rd.i_id = i.i_id
+            join member m on r.m_id = m.m_id
+            WHERE i.m_id = :m_id and r.is_deleted = false and l.actual_return_at is null
+            order by rd.est_start_at asc
         """), {"m_id": m_id}).mappings().all()
         result_list = [dict(row) for row in result]
         return True, {"result": result_list}

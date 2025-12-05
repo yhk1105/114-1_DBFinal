@@ -97,8 +97,7 @@ def get_this_item_borrowed_time(i_id):
         endpoint=f'/item/{i_id}/borrowed_time',
         success=ok,
         item_id=i_id,
-        error_reason=result if not ok else None
-    )
+        error_reason=result if not ok else None)
     if not ok:
         return jsonify({"error": result}), 401
     return jsonify(result)

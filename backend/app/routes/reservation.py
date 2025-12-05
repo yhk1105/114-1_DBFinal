@@ -47,7 +47,7 @@ def delete_this_reservation(r_id):
         return jsonify({"error": result}), 401
     return jsonify({"result": result}), 200
 
-@reservation_bp.get("/reservation/<int:i_id>")
+@reservation_bp.get("/reservation/<int:i_id>/pickup_places")
 def get_this_pickup_places(i_id):
     """
     處理取得物品可取貨地點請求。

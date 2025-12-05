@@ -30,7 +30,7 @@ def check_item_available(session, i_id: int, p_id: int, est_start_at: datetime, 
 
     if conflict_count > 0:
         return False
-    pid_check = db.session.execute(text("""
+    pid_check = session.execute(text("""
         SELECT COUNT(*)
         FROM item i
         join item_pick ip on i.i_id = ip.i_id
@@ -41,7 +41,18 @@ def check_item_available(session, i_id: int, p_id: int, est_start_at: datetime, 
         "i_id": i_id,
     }).scalar()
 
-    return pid_check > 0
+    if pid_check > 0:
+        return False
+    duration = session.execute(text("""
+        SELECT out_duration
+        FROM item
+        WHERE i_id = :i_id
+    """), {
+        "i_id": i_id,
+    }).scalar()
+    if duration < (est_due_at - est_start_at).total_seconds():
+        return False
+    return True
 
 
 def get_pickup_places(i_id: int):

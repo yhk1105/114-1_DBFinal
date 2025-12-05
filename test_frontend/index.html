@@ -239,7 +239,7 @@
                                     <p class="card-text">
                                         <span class="badge" :class="getStatusBadgeClass(item.status)">{{ item.status }}</span>
                                     </p>
-                                    <p class="card-text"><small class="text-muted">外借時長: {{ item.out_duration }} 天</small></p>
+                                    <p class="card-text"><small class="text-muted">最大單次外借時長: {{ formatDuration(item.out_duration) }}</small></p>
                                     <div class="btn-group w-100">
                                         <button class="btn btn-sm btn-outline-primary" @click="editItem(item)">編輯</button>
                                         <button class="btn btn-sm btn-outline-warning" @click="verifyItem(item.i_id)" v-if="item.status === 'Not verified'">申請審核</button>
@@ -317,7 +317,7 @@
                                     <p class="card-text">
                                         <span class="badge" :class="getStatusBadgeClass(item.status)">{{ item.status }}</span>
                                     </p>
-                                    <p class="card-text"><small class="text-muted">外借時長: {{ item.out_duration }} 天</small></p>
+                                    <p class="card-text"><small class="text-muted">最大單次外借時長: {{ formatDuration(item.out_duration) }}</small></p>
                                     <div class="btn-group w-100">
                                         <button class="btn btn-sm btn-primary" @click="viewItemDetail(item.i_id)">查看詳情</button>
                                         <button class="btn btn-sm btn-success" @click="addToReservationList(item)" v-if="item.status === 'Reservable'">加入預約</button>
@@ -467,8 +467,36 @@
                                 <textarea class="form-control" v-model="uploadForm.description" required></textarea>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label">外借時長 (天)</label>
-                                <input type="number" class="form-control" v-model="uploadForm.out_duration" required>
+                                <label class="form-label">最大單次外借時長</label>
+                                <div class="row g-2">
+                                    <div class="col-md-2">
+                                        <label class="form-label small">年</label>
+                                        <input type="number" class="form-control" v-model.number="uploadForm.out_duration.years" min="0" placeholder="0">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small">月</label>
+                                        <input type="number" class="form-control" v-model.number="uploadForm.out_duration.months" min="0" max="11" placeholder="0">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small">天</label>
+                                        <input type="number" class="form-control" v-model.number="uploadForm.out_duration.days" min="0" placeholder="0">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small">小時</label>
+                                        <input type="number" class="form-control" v-model.number="uploadForm.out_duration.hours" min="0" max="23" placeholder="0">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small">分鐘</label>
+                                        <input type="number" class="form-control" v-model.number="uploadForm.out_duration.minutes" min="0" max="59" placeholder="0">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small">秒</label>
+                                        <input type="number" class="form-control" v-model.number="uploadForm.out_duration.seconds" min="0" max="59" placeholder="0">
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted">
+                                    總時長：{{ formatDuration(convertToSeconds(uploadForm.out_duration)) }}
+                                </small>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">類別</label>
@@ -567,8 +595,36 @@
                                 <textarea class="form-control" v-model="editForm.description"></textarea>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label">外借時長 (天)</label>
-                                <input type="number" class="form-control" v-model="editForm.out_duration">
+                                <label class="form-label">最大單次外借時長</label>
+                                <div class="row g-2">
+                                    <div class="col-md-2">
+                                        <label class="form-label small">年</label>
+                                        <input type="number" class="form-control" v-model.number="editForm.out_duration.years" min="0" placeholder="0">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small">月</label>
+                                        <input type="number" class="form-control" v-model.number="editForm.out_duration.months" min="0" max="11" placeholder="0">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small">天</label>
+                                        <input type="number" class="form-control" v-model.number="editForm.out_duration.days" min="0" placeholder="0">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small">小時</label>
+                                        <input type="number" class="form-control" v-model.number="editForm.out_duration.hours" min="0" max="23" placeholder="0">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small">分鐘</label>
+                                        <input type="number" class="form-control" v-model.number="editForm.out_duration.minutes" min="0" max="59" placeholder="0">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small">秒</label>
+                                        <input type="number" class="form-control" v-model.number="editForm.out_duration.seconds" min="0" max="59" placeholder="0">
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted">
+                                    總時長：{{ formatDuration(convertToSeconds(editForm.out_duration)) }}
+                                </small>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">類別</label>
@@ -659,13 +715,45 @@
                         <div v-for="(rd, index) in reservationForm.rd_list" :key="index" class="card mb-3">
                             <div class="card-body">
                                 <h6>物品 #{{ index + 1 }}</h6>
-                                <div class="mb-3">
-                                    <label class="form-label">物品 ID</label>
-                                    <input type="number" class="form-control" v-model="rd.i_id" required>
+                                <div class="mb-3" v-if="rd.i_name">
+                                    <label class="form-label">物品名稱</label>
+                                    <input type="text" class="form-control" :value="rd.i_name" readonly>
+                                    <input type="hidden" v-model="rd.i_id">
                                 </div>
-                                <div class="mb-3">
-                                    <label class="form-label">取貨地點 ID</label>
-                                    <input type="number" class="form-control" v-model="rd.p_id" required>
+                                <div class="mb-3" v-if="!rd.i_id">
+                                    <label class="form-label">物品 ID</label>
+                                    <input type="number" class="form-control" v-model="rd.i_id" @change="loadReservationItemData(index)" required>
+                                    <small class="form-text text-muted">輸入物品 ID 後會自動載入取貨地點和已預約時段</small>
+                                </div>
+                                <div class="mb-3" v-if="rd.i_id && rd.pickup_places.length > 0">
+                                    <label class="form-label">取貨地點</label>
+                                    <select class="form-select" v-model="rd.p_id" required>
+                                        <option value="">請選擇取貨地點</option>
+                                        <option v-for="place in rd.pickup_places" :key="place.p_id" :value="place.p_id">
+                                            {{ place.p_name }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="mb-3" v-if="rd.i_id && rd.pickup_places.length === 0">
+                                    <label class="form-label">取貨地點</label>
+                                    <div class="alert alert-info">載入中...</div>
+                                </div>
+                                <div class="mb-3" v-if="rd.i_id">
+                                    <label class="form-label">已被預約的時段</label>
+                                    <div class="border rounded p-2" style="max-height: 150px; overflow-y: auto; background-color: #f8f9fa;">
+                                        <div v-if="rd.borrowed_times && rd.borrowed_times.length > 0">
+                                            <div v-for="(bt, btIndex) in rd.borrowed_times" :key="btIndex" class="mb-2 p-2 bg-light rounded">
+                                                <small>
+                                                    <strong>開始:</strong> {{ formatDateTime(bt.est_start_at) }}<br>
+                                                    <strong>結束:</strong> {{ formatDateTime(bt.est_due_at) }}
+                                                </small>
+                                            </div>
+                                        </div>
+                                        <div v-else class="text-muted">
+                                            目前沒有被預約的時段
+                                        </div>
+                                    </div>
+                                    <small class="form-text text-muted" v-if="rd.borrowed_times && rd.borrowed_times.length > 0">請避免選擇與上述時段重疊的時間</small>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label">預計開始時間</label>

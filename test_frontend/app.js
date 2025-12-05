@@ -194,7 +194,14 @@ const api = {
     },
 
     async getPickupPlaces(i_id) {
-        const response = await axios.get(`${API_BASE_URL}/reservation/${i_id}`, {
+        const response = await axios.get(`${API_BASE_URL}/reservation/${i_id}/pickup_places`, {
+            headers: getHeaders()
+        });
+        return response.data;
+    },
+
+    async getItemBorrowedTime(i_id) {
+        const response = await axios.get(`${API_BASE_URL}/item/${i_id}/borrowed_time`, {
             headers: getHeaders()
         });
         return response.data;
@@ -299,7 +306,14 @@ createApp({
             uploadForm: {
                 i_name: '',
                 description: '',
-                out_duration: '',
+                out_duration: {
+                    years: 0,
+                    months: 0,
+                    days: 0,
+                    hours: 0,
+                    minutes: 0,
+                    seconds: 0
+                },
                 c_id: '',
                 p_id_list: []
             },
@@ -307,7 +321,14 @@ createApp({
                 i_id: null,
                 i_name: '',
                 description: '',
-                out_duration: '',
+                out_duration: {
+                    years: 0,
+                    months: 0,
+                    days: 0,
+                    hours: 0,
+                    minutes: 0,
+                    seconds: 0
+                },
                 c_id: '',
                 p_id_list: []
             },
@@ -331,7 +352,10 @@ createApp({
             reservationForm: {
                 rd_list: [{
                     i_id: '',
+                    i_name: '',
                     p_id: '',
+                    pickup_places: [], // 該物品的取貨地點列表
+                    borrowed_times: [], // 該物品已被預約的時段
                     est_start_at: '',
                     est_due_at: ''
                 }]
@@ -482,8 +506,10 @@ createApp({
                     return;
                 }
                 
-                if (!this.uploadForm.out_duration || parseInt(this.uploadForm.out_duration) <= 0) {
-                    this.showError('請輸入有效的外借時長');
+                // 驗證最大單次外借時長（至少有一個值大於 0）
+                const totalSeconds = this.convertToSeconds(this.uploadForm.out_duration);
+                if (totalSeconds <= 0) {
+                    this.showError('請輸入有效的最大單次外借時長（至少需要一個時間單位）');
                     return;
                 }
                 
@@ -505,7 +531,7 @@ createApp({
                 const data = {
                     i_name: this.uploadForm.i_name.trim(),
                     description: this.uploadForm.description.trim(),
-                    out_duration: parseInt(this.uploadForm.out_duration),
+                    out_duration: totalSeconds, // 轉換為秒數
                     c_id: finalCId,
                     p_id_list: this.uploadForm.p_id_list
                 };
@@ -533,7 +559,20 @@ createApp({
         },
         
         resetUploadForm() {
-            this.uploadForm = { i_name: '', description: '', out_duration: '', c_id: '', p_id_list: [] };
+            this.uploadForm = { 
+                i_name: '', 
+                description: '', 
+                out_duration: {
+                    years: 0,
+                    months: 0,
+                    days: 0,
+                    hours: 0,
+                    minutes: 0,
+                    seconds: 0
+                }, 
+                c_id: '', 
+                p_id_list: [] 
+            };
             this.categorySelector = {
                 displayText: '',
                 selectedPath: [],
@@ -544,11 +583,13 @@ createApp({
         },
         
         async editItem(item) {
+            // 將秒數轉換回年、月、日、時、分、秒
+            const duration = this.secondsToDuration(item.out_duration || 0);
             this.editForm = {
                 i_id: item.i_id,
                 i_name: item.i_name,
                 description: item.description,
-                out_duration: item.out_duration,
+                out_duration: duration,
                 c_id: item.c_id,
                 p_id_list: [] // 這裡應該從資料庫取得，暫時留空
             };
@@ -569,7 +610,14 @@ createApp({
                 const data = {};
                 if (this.editForm.i_name) data.i_name = this.editForm.i_name;
                 if (this.editForm.description) data.description = this.editForm.description;
-                if (this.editForm.out_duration) data.out_duration = parseInt(this.editForm.out_duration);
+                
+                // 如果有修改最大單次外借時長，轉換為秒數
+                if (this.editForm.out_duration) {
+                    const totalSeconds = this.convertToSeconds(this.editForm.out_duration);
+                    if (totalSeconds > 0) {
+                        data.out_duration = totalSeconds;
+                    }
+                }
                 
                 // 如果有選擇新的類別，使用新類別
                 if (this.categorySelector.selectedPath.length > 0) {
@@ -725,27 +773,69 @@ createApp({
         async viewItemDetail(i_id) {
             try {
                 const result = await api.getItemDetail(i_id);
-                alert(`物品名稱: ${result.item.i_name}\n狀態: ${result.item.status}\n描述: ${result.item.description}\n外借時長: ${result.item.out_duration} 天`);
+                const durationText = this.formatDuration(result.item.out_duration);
+                alert(`物品名稱: ${result.item.i_name}\n狀態: ${result.item.status}\n描述: ${result.item.description}\n最大單次外借時長: ${durationText}`);
             } catch (error) {
                 this.showError(error.response?.data?.error || '載入失敗');
             }
         },
         
-        addToReservationList(item) {
+        async addToReservationList(item) {
             this.currentReservationItem = item;
+            // 初始化預約表單
             this.reservationForm.rd_list = [{
                 i_id: item.i_id,
+                i_name: item.i_name,
                 p_id: '',
+                pickup_places: [],
+                borrowed_times: [],
                 est_start_at: '',
                 est_due_at: ''
             }];
+            
+            // 載入該物品的取貨地點和借用時間
+            await this.loadReservationItemData(0);
+            
             this.showReservationModal = true;
+        },
+        
+        async loadReservationItemData(index) {
+            const rd = this.reservationForm.rd_list[index];
+            if (!rd.i_id) {
+                rd.pickup_places = [];
+                rd.borrowed_times = [];
+                return;
+            }
+            
+            try {
+                // 載入取貨地點
+                const pickupResult = await api.getPickupPlaces(rd.i_id);
+                rd.pickup_places = pickupResult.pickup_places || [];
+                
+                // 載入借用時間
+                try {
+                    const borrowedResult = await api.getItemBorrowedTime(rd.i_id);
+                    rd.borrowed_times = borrowedResult.borrowed_time || [];
+                } catch (borrowedError) {
+                    // 如果載入借用時間失敗，設為空陣列
+                    console.warn('載入借用時間失敗:', borrowedError);
+                    rd.borrowed_times = [];
+                }
+            } catch (error) {
+                console.error('載入物品資料失敗:', error);
+                this.showError('載入物品資料失敗: ' + (error.response?.data?.error || error.message));
+                rd.pickup_places = [];
+                rd.borrowed_times = [];
+            }
         },
         
         addReservationItem() {
             this.reservationForm.rd_list.push({
                 i_id: '',
+                i_name: '',
                 p_id: '',
+                pickup_places: [],
+                borrowed_times: [],
                 est_start_at: '',
                 est_due_at: ''
             });
@@ -758,6 +848,24 @@ createApp({
         async handleCreateReservation() {
             try {
                 this.loading = true;
+                
+                // 驗證所有欄位
+                for (let i = 0; i < this.reservationForm.rd_list.length; i++) {
+                    const rd = this.reservationForm.rd_list[i];
+                    if (!rd.i_id) {
+                        this.showError(`物品 #${i + 1} 缺少物品 ID`);
+                        return;
+                    }
+                    if (!rd.p_id) {
+                        this.showError(`物品 #${i + 1} 請選擇取貨地點`);
+                        return;
+                    }
+                    if (!rd.est_start_at || !rd.est_due_at) {
+                        this.showError(`物品 #${i + 1} 請填寫完整的預約時間`);
+                        return;
+                    }
+                }
+                
                 // 轉換時間格式
                 const rd_list = this.reservationForm.rd_list.map(rd => ({
                     i_id: parseInt(rd.i_id),
@@ -957,6 +1065,18 @@ createApp({
             return date.toLocaleString('zh-TW');
         },
         
+        formatDateTime(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            // 轉換為 datetime-local 格式 (YYYY-MM-DDTHH:mm)
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${year}-${month}-${day} ${hours}:${minutes}`;
+        },
+        
         showError(message) {
             this.errorMessage = message;
             setTimeout(() => {
@@ -1090,6 +1210,84 @@ createApp({
         
         isPickupPlaceSelected(p_id) {
             return this.getCurrentForm().p_id_list.includes(p_id);
+        },
+        
+        // 時間轉換函數
+        convertToSeconds(duration) {
+            // 將年、月、日、時、分、秒轉換為總秒數
+            // 1 年 = 365 天
+            // 1 月 = 30 天（平均）
+            // 1 天 = 24 小時
+            // 1 小時 = 60 分鐘
+            // 1 分鐘 = 60 秒
+            
+            const years = duration.years || 0;
+            const months = duration.months || 0;
+            const days = duration.days || 0;
+            const hours = duration.hours || 0;
+            const minutes = duration.minutes || 0;
+            const seconds = duration.seconds || 0;
+            
+            const totalDays = (years * 365) + (months * 30) + days;
+            const totalHours = (totalDays * 24) + hours;
+            const totalMinutes = (totalHours * 60) + minutes;
+            const totalSeconds = (totalMinutes * 60) + seconds;
+            
+            return totalSeconds;
+        },
+        
+        secondsToDuration(totalSeconds) {
+            // 將總秒數轉換回年、月、日、時、分、秒
+            const seconds = totalSeconds % 60;
+            const totalMinutes = Math.floor(totalSeconds / 60);
+            const minutes = totalMinutes % 60;
+            const totalHours = Math.floor(totalMinutes / 60);
+            const hours = totalHours % 24;
+            const totalDays = Math.floor(totalHours / 24);
+            const days = totalDays % 30;
+            const totalMonths = Math.floor(totalDays / 30);
+            const months = totalMonths % 12;
+            const years = Math.floor(totalMonths / 12);
+            
+            return {
+                years: years,
+                months: months,
+                days: days,
+                hours: hours,
+                minutes: minutes,
+                seconds: seconds
+            };
+        },
+        
+        formatDuration(totalSeconds) {
+            // 將秒數格式化為可讀的字符串
+            if (!totalSeconds || totalSeconds <= 0) {
+                return '0 秒';
+            }
+            
+            const duration = this.secondsToDuration(totalSeconds);
+            const parts = [];
+            
+            if (duration.years > 0) {
+                parts.push(`${duration.years} 年`);
+            }
+            if (duration.months > 0) {
+                parts.push(`${duration.months} 個月`);
+            }
+            if (duration.days > 0) {
+                parts.push(`${duration.days} 天`);
+            }
+            if (duration.hours > 0) {
+                parts.push(`${duration.hours} 小時`);
+            }
+            if (duration.minutes > 0) {
+                parts.push(`${duration.minutes} 分鐘`);
+            }
+            if (duration.seconds > 0) {
+                parts.push(`${duration.seconds} 秒`);
+            }
+            
+            return parts.length > 0 ? parts.join(' ') : '0 秒';
         }
     },
     

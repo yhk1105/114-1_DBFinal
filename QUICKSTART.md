@@ -33,7 +33,7 @@
    **方法 A：使用 Python（推薦）**
    ```bash
    cd test_frontend
-   python3 -m http.server 8080
+   python -m http.server 8080
    ```
    
    **方法 B：使用提供的腳本（macOS/Linux）**

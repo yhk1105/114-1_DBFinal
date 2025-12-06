@@ -28,7 +28,7 @@ def get_this_staff(token: str):
         ).mappings().first()
         if not staff_row:
             return False, "Staff not found"
-        return True, {"staff": staff_row}
+        return True, {"staff": dict(staff_row)}
 
 
 def get_not_deal_reports(token: str):
@@ -50,7 +50,8 @@ def get_not_deal_reports(token: str):
             """),
             {"user_id": s_id}
         ).mappings().all()
-        return True, {"reports": report_row}
+        reports_list = [dict(row) for row in report_row]
+        return True, {"reports": reports_list}
 
 
 def conclude_report(token: str, re_id: int, data: dict):
@@ -66,7 +67,8 @@ def conclude_report(token: str, re_id: int, data: dict):
             return False, {"message": "Invalid conclusion"}
 
         try:
-            db.session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+            db.session.execute(
+                text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
 
             # 1. 取得檢舉相關資訊 (增加抓取 m_id, c_id 以便後續檢查)
             # 使用 FOR UPDATE 鎖定 report、item 和 contribution，避免並發問題
@@ -83,6 +85,7 @@ def conclude_report(token: str, re_id: int, data: dict):
                 db.session.rollback()
                 return False, {"message": "Report not found"}
 
+            report_dict = dict(report_row)
             # 2. 更新檢舉結案狀態
             db.session.execute(text("""
                 UPDATE report
@@ -91,9 +94,9 @@ def conclude_report(token: str, re_id: int, data: dict):
             """),
                                {"r_conclusion": data["r_conclusion"], "conclude_at": datetime.now(), "re_id": re_id})
 
-            target_m_id = report_row["m_id"]
-            target_c_id = report_row["c_id"]
-            target_i_id = report_row["i_id"]
+            target_m_id = report_dict["m_id"]
+            target_c_id = report_dict["c_id"]
+            target_i_id = report_dict["i_id"]
 
             # 3. 處理 Ban Category
             if data["r_conclusion"] == "Ban Category":
@@ -104,7 +107,7 @@ def conclude_report(token: str, re_id: int, data: dict):
                     ON CONFLICT (c_id, m_id) DO UPDATE
                     SET is_deleted = false, ban_at = EXCLUDED.ban_at, s_id = EXCLUDED.s_id
                 """),
-                {"s_id": s_id, "c_id": target_c_id, "m_id": target_m_id, "ban_at": datetime.now()})
+                                   {"s_id": s_id, "c_id": target_c_id, "m_id": target_m_id, "ban_at": datetime.now()})
             deleted_reservations = []
             # 4. 處理 Delist 或 Ban Category (都需要下架商品)
             if data["r_conclusion"] in ["Delist", "Ban Category"]:
@@ -138,6 +141,8 @@ def conclude_report(token: str, re_id: int, data: dict):
                     )
                     RETURNING r_id
                 """), {"m_id": target_m_id, "c_id": target_c_id}).mappings().all()
+                deleted_reservations = [dict(row)
+                                        for row in deleted_reservations]
 
             # 5. 檢查是否有正在進行中的借用 (Active Loans) 以便回傳警示
             active_loans = db.session.execute(text("""
@@ -151,6 +156,7 @@ def conclude_report(token: str, re_id: int, data: dict):
                 AND i.c_id = :c_id
                 AND le_return.timestamp IS NULL -- 沒有歸還紀錄
             """), {"m_id": target_m_id, "c_id": target_c_id}).mappings().all()
+            active_loans = [dict(row) for row in active_loans]
 
             db.session.commit()
 
@@ -168,6 +174,7 @@ def conclude_report(token: str, re_id: int, data: dict):
 
     return False, {"message": "Unauthorized role"}
 
+
 def get_not_deal_verification(token: str):
     """
     處理取得未處理的驗證資訊請求。
@@ -184,12 +191,14 @@ def get_not_deal_verification(token: str):
             FROM item_verification
             WHERE s_id = :s_id and v_conclusion = 'Pending'
         """),
-        {"s_id": s_id}
-        ).mappings().all()
+                                              {"s_id": s_id}
+                                              ).mappings().all()
         if not verification_row:
             return False, {"message": "No pending verifications"}
-        return True, {"verifications": verification_row}
+        verifications_list = [dict(row) for row in verification_row]
+        return True, {"verifications": verifications_list}
     return False, "Unauthorized"
+
 
 def conclude_verification(token: str, iv_id: int, data: dict):
     """
@@ -208,42 +217,47 @@ def conclude_verification(token: str, iv_id: int, data: dict):
                 SET v_conclusion = :v_conclusion, conclude_at = :conclude_at
                 WHERE iv_id = :iv_id
             """),
-            {"v_conclusion": data["v_conclusion"], "conclude_at": datetime.now(), "iv_id": iv_id}
-            )
+                               {"v_conclusion": data["v_conclusion"], "conclude_at": datetime.now(
+                               ), "iv_id": iv_id}
+                               )
             result = db.session.execute(text("""
                     SELECT m_id, item.i_id 
                     FROM item_verification
                     join item on item_verification.i_id = item.i_id
                     where item_verification.iv_id = :iv_id
                 """),
-                {"iv_id": iv_id}
-                ).mappings().first()
+                                        {"iv_id": iv_id}
+                                        ).mappings().first()
             if not result:
                 db.session.rollback()
                 return False, {"message": "Item verification not found"}
+            result_dict = dict(result)
             if data["v_conclusion"] == "Pass":
                 db.session.execute(text("""
                     update contribution
                     set is_active = true
                     where m_id = :m_id and i_id = :i_id
                 """),
-                {"m_id": result["m_id"], "i_id": result["i_id"]}
-                )
+                                   {"m_id": result_dict["m_id"],
+                                       "i_id": result_dict["i_id"]}
+                                   )
             elif data["v_conclusion"] == "Fail":
                 check_have_contribution = db.session.execute(text("""
                     SELECT COUNT(*) FROM contribution
                     WHERE m_id = :m_id and i_id = :i_id
                 """),
-                {"m_id": result["m_id"], "i_id": result["i_id"]}
-                ).scalar()
+                                                             {"m_id": result_dict["m_id"],
+                                                                 "i_id": result_dict["i_id"]}
+                                                             ).scalar()
                 if check_have_contribution != 0:
                     db.session.execute(text("""
                         UPDATE contribution
                         SET is_active = false
                         WHERE m_id = :m_id and i_id = :i_id
                     """),
-                    {"m_id": result["m_id"], "i_id": result["i_id"]}
-                    )
+                                       {"m_id": result_dict["m_id"],
+                                           "i_id": result_dict["i_id"]}
+                                       )
             db.session.commit()
 
             return True, {"message": "Success"}

@@ -43,6 +43,7 @@ def check_item_available(session, i_id: int, p_id: int, est_start_at: datetime, 
 
     return pid_check > 0
 
+
 def get_pickup_places(i_id: int):
     """
     處理取得物品可取貨地點請求。
@@ -55,7 +56,8 @@ def get_pickup_places(i_id: int):
     """), {
         "i_id": i_id,
     }).mappings().all()
-    return pickup_places
+    return [dict(row) for row in pickup_places]
+
 
 def create_reservation(token: str, data: dict):
     """
@@ -96,20 +98,21 @@ def create_reservation(token: str, data: dict):
                 """), {
                     "i_id": rd["i_id"]
                 }).mappings().first()
+                cat_dict = dict(cat)
                 check_ban = db.session.execute(text("""
                     SELECT COUNT(*)
                     FROM category_ban
                     WHERE c_id = :c_id and m_id = :m_id and is_deleted = false
                 """), {
-                    "c_id": cat["c_id"],
+                    "c_id": cat_dict["c_id"],
                     "m_id": m_id,
                 }).scalar()
                 if check_ban > 0:
                     db.session.rollback()
-                    return False, f"You are banned from {cat['c_name']} category"
+                    return False, f"You are banned from {cat_dict['c_name']} category"
 
                 # 取得物品的 root category
-                root_c_id = get_root_category(db.session, cat["c_id"])
+                root_c_id = get_root_category(db.session, cat_dict["c_id"])
 
                 # 檢查用戶在該 root category 及其所有子類別下是否有 active contribution
                 check_contribution = db.session.execute(text("""
@@ -139,6 +142,7 @@ def create_reservation(token: str, data: dict):
                     "root_c_id": root_c_id,
                     "m_id": m_id,
                 }).mappings().all()
+                check_contribution = [dict(row) for row in check_contribution]
 
                 if len(check_contribution) > 0:
                     # 如果找到 contribution，確保它是 active 的
@@ -152,7 +156,7 @@ def create_reservation(token: str, data: dict):
                     })
                 else:
                     db.session.rollback()
-                    return False, f"Your contribution to {cat['c_name']} category (root category) is not active"
+                    return False, f"Your contribution to {cat_dict['c_name']} category (root category) is not active"
                 new_reservation_detail = ReservationDetail(
                     r_id=new_reservation.r_id,
                     i_id=rd["i_id"],
@@ -188,6 +192,7 @@ def delete_reservation(token: str, r_id: int):
             """), {
                 "r_id": r_id,
             }).mappings().all()
+            check_time = [dict(row) for row in check_time]
             for rd in check_time:
                 if rd["est_start_at"] < datetime.now() + timedelta(hours=24):
                     db.session.rollback()
@@ -200,6 +205,7 @@ def delete_reservation(token: str, r_id: int):
             """), {
                 "r_id": r_id,
             }).mappings().all()
+            rds = [dict(row) for row in rds]
             for rd in rds:
                 # 取得該物品的 root category
                 root_c_id = get_root_category(db.session, rd["c_id"])
@@ -231,6 +237,8 @@ def delete_reservation(token: str, r_id: int):
                     "root_c_id": root_c_id,
                     "m_id": m_id,
                 }).mappings().first()
+                if inactive_contribution:
+                    inactive_contribution = dict(inactive_contribution)
 
                 # 如果找到 inactive 的 contribution，將它設為 active
                 if inactive_contribution:

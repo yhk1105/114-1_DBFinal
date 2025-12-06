@@ -43,7 +43,7 @@ def get_item_detail(i_id: int):
         {"i_id": i_id}).mappings().first()
     if not item_row:
         return False, "Item not found"
-    return True, {"item": item_row}
+    return True, {"item": dict(item_row)}
 
 
 def get_category_items(c_id: int):
@@ -62,7 +62,8 @@ def get_category_items(c_id: int):
         {"c_id": c_id}).mappings().all()
     if not items_row:
         return False, "Items not found"
-    return True, {"items": items_row}
+    items_list = [dict(row) for row in items_row]
+    return True, {"items": items_list}
 
 
 def get_item_borrowed_time(i_id: int):
@@ -82,7 +83,8 @@ def get_item_borrowed_time(i_id: int):
         {"i_id": i_id, "today": today}).mappings().all()
     if not borrowed_time_row:
         return False, "No borrowed time"
-    return True, {"borrowed_time": borrowed_time_row}
+    borrowed_time_list = [dict(row) for row in borrowed_time_row]
+    return True, {"borrowed_time": borrowed_time_list}
 
 
 def upload_item(token: str, data: dict):
@@ -95,23 +97,35 @@ def upload_item(token: str, data: dict):
     user_id, active_role = get_user(token)
     if not user_id:
         return False, "Unauthorized"
-    if active_role == "member":
-        try:
-            item_row = Item(i_name=data["i_name"], status="Not verified",
-                            description=data["description"], out_duration=data["out_duration"], m_id=user_id, c_id=data["c_id"])
-            db.session.flush()
-            for p_id in data["p_id_list"]:
-                item_pick_row = ItemPick(i_id=item_row.i_id, p_id=p_id)
-                db.session.add(item_pick_row)
+    if active_role != "member":
+        return False, "Only members can upload items"
 
-            contribution_row = Contribution(
-                m_id=user_id, i_id=item_row.i_id, is_active=False)
-            db.session.add(contribution_row)
-            db.session.commit()
-            return True, {"item_id": item_row.i_id, "name": data["i_name"], "status": item_row.status}
-        except Exception as e:
-            db.session.rollback()
-            return False, str(e)
+    try:
+        # 驗證必要欄位
+        if not data.get("i_name") or not data.get("description") or not data.get("out_duration") or not data.get("c_id"):
+            return False, "Missing required fields"
+
+        if not data.get("p_id_list") or len(data["p_id_list"]) == 0:
+            return False, "At least one pickup place is required"
+
+        item_row = Item(i_name=data["i_name"], status="Not verified",
+                        description=data["description"], out_duration=data["out_duration"], m_id=user_id, c_id=data["c_id"])
+        db.session.add(item_row)
+        db.session.flush()
+
+        for p_id in data["p_id_list"]:
+            item_pick_row = ItemPick(i_id=item_row.i_id, p_id=p_id)
+            db.session.add(item_pick_row)
+
+        contribution_row = Contribution(
+            m_id=user_id, i_id=item_row.i_id, is_active=False)
+        db.session.add(contribution_row)
+        db.session.commit()
+        return True, {"item_id": item_row.i_id, "name": data["i_name"], "status": item_row.status}
+    except Exception as e:
+        db.session.rollback()
+        print(e)
+        return False, str(e)
 
 
 def update_item(token: str, i_id: int, data: dict):
@@ -347,7 +361,8 @@ def verify_item(token: str, i_id: int):
             db.session.rollback()
             return False, str(e)
 
-def get_subcategory_items(c_id: int):
+
+def get_subcategory(c_id: int):
     """
     處理取得特定子類別物品請求。
     """
@@ -359,7 +374,8 @@ def get_subcategory_items(c_id: int):
                 WHERE parent_c_id is NULL
             """),
             {"c_id": c_id}).mappings().all()
-        return items_row
+        # 轉換為字典列表
+        return [dict(row) for row in items_row]
     else:
         items_row = db.session.execute(
             text("""
@@ -368,4 +384,5 @@ def get_subcategory_items(c_id: int):
                 WHERE parent_c_id = :c_id
             """),
             {"c_id": c_id}).mappings().all()
-        return items_row
+        # 轉換為字典列表
+        return [dict(row) for row in items_row]

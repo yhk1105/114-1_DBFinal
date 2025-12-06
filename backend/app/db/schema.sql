@@ -1,6 +1,4 @@
 -- 建立 schema
-CREATE SCHEMA IF NOT EXISTS our_things;
-SET search_path TO our_things;
 
 -- 建立資料表
 CREATE TABLE member (

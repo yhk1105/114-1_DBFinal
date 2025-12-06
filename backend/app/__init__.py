@@ -10,6 +10,7 @@ from .routes.me import me_bp
 from .routes.owner import owner_bp
 from .routes.reservation import reservation_bp
 from .routes.staff import staff_bp
+from .routes.pickup_places import pp_bp
 from .mongodb import init_mongodb
 
 
@@ -22,14 +23,6 @@ def create_app():
 
     # 初始化 SQLAlchemy
     db.init_app(app)
-
-    # 在每個資料庫連線建立時設定 search_path（最可靠的方法）
-    with app.app_context():
-        @event.listens_for(db.engine, "connect", insert=True)
-        def set_search_path(dbapi_conn, connection_record):
-            """在每個資料庫連線建立時設定 search_path"""
-            with dbapi_conn.cursor() as cursor:
-                cursor.execute("SET search_path TO our_things")
 
     # 初始化 MongoDB（類似 db 的處理方式）
     init_mongo_client(app.config["MONGODB_URI"])
@@ -45,5 +38,6 @@ def create_app():
     app.register_blueprint(owner_bp)
     app.register_blueprint(reservation_bp)
     app.register_blueprint(staff_bp)
+    app.register_blueprint(pp_bp)
 
     return app

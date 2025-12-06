@@ -15,13 +15,16 @@ function getSessionId() {
 // 取得請求 headers（包含 Session ID 和 Token）
 function getHeaders(includeAuth = false) {
     const headers = {
-        'X-Session-ID': getSessionId()
+        'X-Session-ID': getSessionId(),
+        'Content-Type': 'application/json'
     };
     
     if (includeAuth) {
         const token = localStorage.getItem('token');
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
+        } else {
+            console.warn('Token not found in localStorage');
         }
     }
     
@@ -197,6 +200,20 @@ const api = {
         return response.data;
     },
 
+    async getAllPickupPlaces() {
+        const response = await axios.get(`${API_BASE_URL}/pickup-places`, {
+            headers: getHeaders()
+        });
+        return response.data;
+    },
+
+    async getSubcategories(c_id) {
+        const response = await axios.get(`${API_BASE_URL}/item/category/${c_id}/subcategories`, {
+            headers: getHeaders()
+        });
+        return response.data;
+    },
+
     // 員工相關
     async getStaff() {
         const response = await axios.get(`${API_BASE_URL}/staff`, {
@@ -284,7 +301,7 @@ createApp({
                 description: '',
                 out_duration: '',
                 c_id: '',
-                p_id_list_str: ''
+                p_id_list: []
             },
             editForm: {
                 i_id: null,
@@ -292,8 +309,25 @@ createApp({
                 description: '',
                 out_duration: '',
                 c_id: '',
-                p_id_list_str: ''
+                p_id_list: []
             },
+            // 類別選擇器狀態
+            categorySelector: {
+                displayText: '',
+                selectedPath: [], // [{c_id, c_name}, ...]
+                currentSubcategories: [],
+                showDropdown: false,
+                isUploadForm: true // true for upload, false for edit
+            },
+            // 瀏覽頁面類別選擇器狀態
+            browseCategorySelector: {
+                displayText: '',
+                selectedPath: [], // [{c_id, c_name}, ...]
+                currentSubcategories: [],
+                showDropdown: false
+            },
+            // 取貨地點列表
+            allPickupPlaces: [],
             reservationForm: {
                 rd_list: [{
                     i_id: '',
@@ -429,36 +463,103 @@ createApp({
         async handleUploadItem() {
             try {
                 this.loading = true;
-                const p_id_list = this.uploadForm.p_id_list_str.split(',').map(id => parseInt(id.trim()));
+                
+                // 檢查是否已登入
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    this.showError('請先登入');
+                    return;
+                }
+                
+                // 驗證必要欄位
+                if (!this.uploadForm.i_name || !this.uploadForm.i_name.trim()) {
+                    this.showError('請輸入物品名稱');
+                    return;
+                }
+                
+                if (!this.uploadForm.description || !this.uploadForm.description.trim()) {
+                    this.showError('請輸入物品描述');
+                    return;
+                }
+                
+                if (!this.uploadForm.out_duration || parseInt(this.uploadForm.out_duration) <= 0) {
+                    this.showError('請輸入有效的外借時長');
+                    return;
+                }
+                
+                // 取得最後選擇的類別 ID
+                const finalCId = this.categorySelector.selectedPath.length > 0 
+                    ? this.categorySelector.selectedPath[this.categorySelector.selectedPath.length - 1].c_id 
+                    : null;
+                
+                if (!finalCId) {
+                    this.showError('請選擇類別');
+                    return;
+                }
+                
+                if (!this.uploadForm.p_id_list || this.uploadForm.p_id_list.length === 0) {
+                    this.showError('請至少選擇一個取貨地點');
+                    return;
+                }
+                
                 const data = {
-                    i_name: this.uploadForm.i_name,
-                    description: this.uploadForm.description,
+                    i_name: this.uploadForm.i_name.trim(),
+                    description: this.uploadForm.description.trim(),
                     out_duration: parseInt(this.uploadForm.out_duration),
-                    c_id: parseInt(this.uploadForm.c_id),
-                    p_id_list: p_id_list
+                    c_id: finalCId,
+                    p_id_list: this.uploadForm.p_id_list
                 };
                 
-                await api.uploadItem(data);
+                console.log('上傳物品數據:', data);
+                const result = await api.uploadItem(data);
+                console.log('上傳成功:', result);
+                
                 this.showUploadModal = false;
-                this.uploadForm = { i_name: '', description: '', out_duration: '', c_id: '', p_id_list_str: '' };
+                this.resetUploadForm();
                 this.showSuccess('物品上傳成功！');
                 await this.loadMyItems();
             } catch (error) {
-                this.showError(error.response?.data?.error || '上傳失敗');
+                console.error('上傳失敗:', error);
+                console.error('錯誤詳情:', {
+                    message: error.message,
+                    response: error.response?.data,
+                    status: error.response?.status
+                });
+                const errorMessage = error.response?.data?.error || error.message || '上傳失敗';
+                this.showError(errorMessage);
             } finally {
                 this.loading = false;
             }
         },
         
-        editItem(item) {
+        resetUploadForm() {
+            this.uploadForm = { i_name: '', description: '', out_duration: '', c_id: '', p_id_list: [] };
+            this.categorySelector = {
+                displayText: '',
+                selectedPath: [],
+                currentSubcategories: [],
+                showDropdown: false,
+                isUploadForm: true
+            };
+        },
+        
+        async editItem(item) {
             this.editForm = {
                 i_id: item.i_id,
                 i_name: item.i_name,
                 description: item.description,
                 out_duration: item.out_duration,
                 c_id: item.c_id,
-                p_id_list_str: '' // 這裡應該從資料庫取得，暫時留空
+                p_id_list: [] // 這裡應該從資料庫取得，暫時留空
             };
+            // 初始化編輯表單的類別選擇器
+            this.categorySelector.isUploadForm = false;
+            this.categorySelector.selectedPath = [];
+            this.categorySelector.displayText = '';
+            this.categorySelector.currentSubcategories = [];
+            this.categorySelector.showDropdown = false;
+            // 載入根類別
+            await this.loadSubcategories(0, false);
             this.showEditModal = true;
         },
         
@@ -469,9 +570,17 @@ createApp({
                 if (this.editForm.i_name) data.i_name = this.editForm.i_name;
                 if (this.editForm.description) data.description = this.editForm.description;
                 if (this.editForm.out_duration) data.out_duration = parseInt(this.editForm.out_duration);
-                if (this.editForm.c_id) data.c_id = parseInt(this.editForm.c_id);
-                if (this.editForm.p_id_list_str) {
-                    data.p_id_list = this.editForm.p_id_list_str.split(',').map(id => parseInt(id.trim()));
+                
+                // 如果有選擇新的類別，使用新類別
+                if (this.categorySelector.selectedPath.length > 0) {
+                    const finalCId = this.categorySelector.selectedPath[this.categorySelector.selectedPath.length - 1].c_id;
+                    data.c_id = finalCId;
+                } else if (this.editForm.c_id) {
+                    data.c_id = parseInt(this.editForm.c_id);
+                }
+                
+                if (this.editForm.p_id_list && this.editForm.p_id_list.length > 0) {
+                    data.p_id_list = this.editForm.p_id_list;
                 }
                 
                 await api.updateItem(this.editForm.i_id, data);
@@ -515,20 +624,102 @@ createApp({
         
         // 瀏覽物品 (Member)
         async loadCategoryItems() {
-            if (!this.selectedCategory) {
+            // 取得最後選擇的類別 ID
+            const finalCId = this.browseCategorySelector.selectedPath.length > 0 
+                ? this.browseCategorySelector.selectedPath[this.browseCategorySelector.selectedPath.length - 1].c_id 
+                : null;
+            
+            if (!finalCId) {
                 this.browseItems = [];
                 return;
             }
             
             try {
                 this.loading = true;
-                const result = await api.getCategoryItems(this.selectedCategory);
+                const result = await api.getCategoryItems(finalCId);
                 this.browseItems = result.items || [];
             } catch (error) {
                 this.showError(error.response?.data?.error || '載入失敗');
             } finally {
                 this.loading = false;
             }
+        },
+        
+        // 瀏覽頁面類別選擇器相關方法
+        async loadBrowseSubcategories(c_id) {
+            try {
+                const result = await api.getSubcategories(c_id);
+                this.browseCategorySelector.currentSubcategories = result.subcategories || [];
+                this.browseCategorySelector.showDropdown = true;
+                
+                console.log('載入瀏覽子類別成功:', {
+                    c_id,
+                    count: this.browseCategorySelector.currentSubcategories.length,
+                    items: this.browseCategorySelector.currentSubcategories
+                });
+            } catch (error) {
+                console.error('載入瀏覽子類別失敗:', error);
+                this.showError(error.response?.data?.error || '載入子類別失敗');
+                // 即使出錯也顯示下拉選單（如果已經有選擇）
+                if (this.browseCategorySelector.selectedPath.length > 0) {
+                    this.browseCategorySelector.showDropdown = true;
+                }
+            }
+        },
+        
+        async onBrowseCategoryFieldClick(event) {
+            // 阻止事件冒泡，避免關閉下拉選單
+            if (event) {
+                event.stopPropagation();
+            }
+            
+            // 如果還沒有選擇任何類別，載入根類別
+            if (this.browseCategorySelector.selectedPath.length === 0) {
+                // 先顯示下拉選單（即使還在載入）
+                this.browseCategorySelector.showDropdown = true;
+                await this.loadBrowseSubcategories(0);
+            } else {
+                // 如果已經有選擇，顯示當前層級的子類別
+                const lastSelected = this.browseCategorySelector.selectedPath[this.browseCategorySelector.selectedPath.length - 1];
+                // 先顯示下拉選單（即使還在載入）
+                this.browseCategorySelector.showDropdown = true;
+                await this.loadBrowseSubcategories(lastSelected.c_id);
+            }
+        },
+        
+        async selectBrowseCategory(category) {
+            // 將選中的類別加入路徑
+            this.browseCategorySelector.selectedPath.push(category);
+            
+            // 更新顯示文字（用 \ 分隔）
+            this.browseCategorySelector.displayText = this.browseCategorySelector.selectedPath
+                .map(c => c.c_name)
+                .join(' \\ ');
+            
+            // 載入下一層級的子類別
+            await this.loadBrowseSubcategories(category.c_id);
+            
+            // 自動載入該類別的物品
+            await this.loadCategoryItems();
+        },
+        
+        finishBrowseCategorySelection() {
+            // 使用者決定不再繼續選擇，關閉下拉選單
+            this.browseCategorySelector.showDropdown = false;
+            // 載入該類別的物品
+            this.loadCategoryItems();
+        },
+        
+        clearBrowseCategory() {
+            // 清除選擇
+            this.browseCategorySelector = {
+                displayText: '',
+                selectedPath: [],
+                currentSubcategories: [],
+                showDropdown: false
+            };
+            // 清空物品列表
+            this.browseItems = [];
         },
         
         async viewItemDetail(i_id) {
@@ -778,6 +969,127 @@ createApp({
             setTimeout(() => {
                 this.successMessage = '';
             }, 3000);
+        },
+        
+        // 類別選擇器相關方法
+        async loadSubcategories(c_id, isUploadForm = true) {
+            try {
+                const result = await api.getSubcategories(c_id);
+                this.categorySelector.currentSubcategories = result.subcategories || [];
+                this.categorySelector.showDropdown = true;
+                this.categorySelector.isUploadForm = isUploadForm;
+                
+                console.log('載入子類別成功:', {
+                    c_id,
+                    count: this.categorySelector.currentSubcategories.length,
+                    subcategories: this.categorySelector.currentSubcategories,
+                    result: result
+                });
+            } catch (error) {
+                console.error('載入子類別失敗:', error);
+                console.error('錯誤詳情:', {
+                    message: error.message,
+                    response: error.response?.data,
+                    status: error.response?.status
+                });
+                this.showError(error.response?.data?.error || error.message || '載入子類別失敗');
+                // 即使出錯也顯示下拉選單（如果已經有選擇）
+                if (this.categorySelector.selectedPath.length > 0) {
+                    this.categorySelector.showDropdown = true;
+                } else {
+                    // 如果沒有選擇且出錯，關閉下拉選單
+                    this.categorySelector.showDropdown = false;
+                }
+            }
+        },
+        
+        async onCategoryFieldClick(isUploadForm = true, event) {
+            // 阻止事件冒泡，避免關閉下拉選單
+            if (event) {
+                event.stopPropagation();
+            }
+            
+            this.categorySelector.isUploadForm = isUploadForm;
+            
+            // 如果還沒有選擇任何類別，載入根類別
+            if (this.categorySelector.selectedPath.length === 0) {
+                // 先顯示下拉選單（即使還在載入）
+                this.categorySelector.showDropdown = true;
+                await this.loadSubcategories(0, isUploadForm);
+            } else {
+                // 如果已經有選擇，顯示當前層級的子類別
+                const lastSelected = this.categorySelector.selectedPath[this.categorySelector.selectedPath.length - 1];
+                // 先顯示下拉選單（即使還在載入）
+                this.categorySelector.showDropdown = true;
+                await this.loadSubcategories(lastSelected.c_id, isUploadForm);
+            }
+        },
+        
+        async selectCategory(category) {
+            // 將選中的類別加入路徑
+            this.categorySelector.selectedPath.push(category);
+            
+            // 更新顯示文字（用 \ 分隔）
+            this.categorySelector.displayText = this.categorySelector.selectedPath
+                .map(c => c.c_name)
+                .join(' \\ ');
+            
+            // 更新表單的 c_id（使用最後選擇的類別）
+            if (this.categorySelector.isUploadForm) {
+                this.uploadForm.c_id = category.c_id;
+            } else {
+                this.editForm.c_id = category.c_id;
+            }
+            
+            // 載入下一層級的子類別
+            await this.loadSubcategories(category.c_id, this.categorySelector.isUploadForm);
+            
+            // 保持下拉選單打開，讓使用者可以繼續選擇或完成
+        },
+        
+        finishCategorySelection() {
+            // 使用者決定不再繼續選擇，關閉下拉選單
+            this.categorySelector.showDropdown = false;
+            // 最終的 c_id 已經在 selectedPath 的最後一個元素中
+        },
+        
+        resetCategorySelector() {
+            this.categorySelector = {
+                displayText: '',
+                selectedPath: [],
+                currentSubcategories: [],
+                showDropdown: false,
+                isUploadForm: true
+            };
+        },
+        
+        // 取貨地點相關方法
+        async loadAllPickupPlaces() {
+            try {
+                const result = await api.getAllPickupPlaces();
+                this.allPickupPlaces = result.pickup_places || [];
+            } catch (error) {
+                // 如果 API 不存在，顯示錯誤訊息
+                this.showError('無法載入取貨地點列表，請確認後端 API 已實作');
+                console.error('Error loading pickup places:', error);
+            }
+        },
+        
+        togglePickupPlace(p_id) {
+            const index = this.getCurrentForm().p_id_list.indexOf(p_id);
+            if (index > -1) {
+                this.getCurrentForm().p_id_list.splice(index, 1);
+            } else {
+                this.getCurrentForm().p_id_list.push(p_id);
+            }
+        },
+        
+        getCurrentForm() {
+            return this.categorySelector.isUploadForm ? this.uploadForm : this.editForm;
+        },
+        
+        isPickupPlaceSelected(p_id) {
+            return this.getCurrentForm().p_id_list.includes(p_id);
         }
     },
     
@@ -789,8 +1101,14 @@ createApp({
             if (newView === 'myItems') {
                 this.loadMyItems();
             } else if (newView === 'browseItems') {
-                // 載入類別列表（這裡需要後端提供 API，暫時跳過）
-                // this.loadCategories();
+                // 初始化瀏覽頁面的類別選擇器
+                this.browseCategorySelector = {
+                    displayText: '',
+                    selectedPath: [],
+                    currentSubcategories: [],
+                    showDropdown: false
+                };
+                this.browseItems = [];
             } else if (newView === 'myRecords') {
                 if (this.recordsTab === 'reservations') {
                     this.loadMyReservations();
@@ -813,6 +1131,31 @@ createApp({
                 this.loadReviewableItems();
             } else if (newTab === 'contributions') {
                 this.loadContributions();
+            }
+        },
+        
+        showUploadModal(newVal) {
+            if (newVal) {
+                // Modal 打開時載入取貨地點列表和初始化類別選擇器
+                this.loadAllPickupPlaces();
+                this.resetCategorySelector();
+                this.categorySelector.isUploadForm = true;
+                this.categorySelector.showDropdown = false; // 初始狀態不顯示，等點擊時再顯示
+            } else {
+                // Modal 關閉時重置
+                this.categorySelector.showDropdown = false;
+            }
+        },
+        
+        showEditModal(newVal) {
+            if (newVal) {
+                // Modal 打開時載入取貨地點列表和初始化類別選擇器
+                this.loadAllPickupPlaces();
+                this.categorySelector.isUploadForm = false;
+                this.categorySelector.showDropdown = false; // 初始狀態不顯示，等點擊時再顯示
+            } else {
+                // Modal 關閉時重置
+                this.categorySelector.showDropdown = false;
             }
         }
     }

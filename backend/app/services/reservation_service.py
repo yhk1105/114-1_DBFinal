@@ -100,9 +100,13 @@ def create_reservation(token: str, data: dict):
                 # 假設 data["rd_list"] 裡的日期是 ISO 格式字串，需要先 parse
                 start_at = rd["est_start_at"]
                 if isinstance(start_at, str):
+                    if start_at.endswith('Z'):
+                        start_at = start_at[:-1] + '+00:00'
                     start_at = datetime.fromisoformat(start_at)
                 due_at = rd["est_due_at"]
                 if isinstance(due_at, str):
+                    if due_at.endswith('Z'):
+                        due_at = due_at[:-1] + '+00:00'
                     due_at = datetime.fromisoformat(due_at)
 
                 if not check_item_available(db.session, rd["i_id"], rd["p_id"], start_at, due_at):

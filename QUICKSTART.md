@@ -2,6 +2,30 @@
 
 本指南將幫助您快速啟動整個系統（後端 + 前端）。
 
+## 步驟 0：安裝必要軟體（首次設定）
+
+### 安裝 PostgreSQL
+請參考專案中的 PostgreSQL 設定文件。
+
+### 安裝 MongoDB（用於漏斗追蹤功能）
+
+**使用 Homebrew 安裝（推薦）**：
+```bash
+# 安裝 MongoDB
+brew tap mongodb/brew
+brew install mongodb-community@7.0
+
+# 啟動 MongoDB 服務
+brew services start mongodb-community@7.0
+```
+
+**詳細安裝說明**：請參考 `MONGODB_SETUP.md`
+
+**驗證安裝**：
+```bash
+mongosh --eval "db.runCommand({ connectionStatus: 1 })"
+```
+
 ## 步驟 1：設定後端
 
 1. **進入後端目錄並安裝依賴**：
@@ -14,6 +38,7 @@
    - 確保 PostgreSQL 資料庫已建立
    - 執行 `schema.sql` 建立資料表
    - （可選）執行 `mockdata.sql` 載入測試資料
+   - 確保 MongoDB 服務正在運行（用於漏斗追蹤功能）
 
 3. **啟動後端服務**：
    ```bash
@@ -92,14 +117,22 @@
 ### 後端無法啟動
 
 - 檢查是否已安裝所有依賴：`pip install -r requirements.txt`
-- 檢查資料庫連線設定
-- 檢查 port 8000 是否被占用
+- 檢查 PostgreSQL 資料庫連線設定
+- 檢查 MongoDB 服務是否正在運行：`brew services list | grep mongodb`
+- 檢查 port 8070 是否被占用
 
 ### 前端無法連接到後端
 
-- 確認後端正在運行（`http://localhost:8000`）
+- 確認後端正在運行（`http://localhost:8070`）
 - 檢查瀏覽器控制台是否有 CORS 錯誤
 - 確認使用 HTTP 伺服器開啟前端（不要直接開啟 HTML 檔案）
+
+### MongoDB 連線失敗
+
+- 確認 MongoDB 服務正在運行：`brew services list | grep mongodb`
+- 如果未運行，啟動服務：`brew services start mongodb-community@7.0`
+- 檢查 `.env` 檔案中的 `MONGODB_URI` 設定
+- 查看後端日誌中的 MongoDB 連線訊息
 
 ### API 呼叫失敗
 
@@ -109,6 +142,7 @@
 
 ## 下一步
 
+- 閱讀 `MONGODB_SETUP.md` 了解 MongoDB 詳細設定
 - 閱讀 `frontend/README.md` 了解前端詳細功能
 - 閱讀 `API_SPEC.md` 了解所有 API 端點
 - 根據需求自訂前端樣式和功能

@@ -11,6 +11,8 @@ import psycopg2
 from psycopg2.extras import execute_values
 from urllib.parse import urlparse
 from dotenv import load_dotenv
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
 # 載入環境變數
 load_dotenv()
@@ -18,6 +20,11 @@ load_dotenv()
 # 資料庫連線設定
 DATABASE_URL = os.getenv("DATABASE_URL")
 TARGET_DB_NAME = "our_things"
+
+# MongoDB 連線設定
+MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
+MONGODB_DB_NAME = "our_things_funnel_tracking"
+MONGODB_COLLECTION_NAME = "user_sessions"
 
 # CSV 檔案路徑（相對於此腳本）
 # 腳本在 backend/app/db/import_csv.py，CSV 在 backend/app/db/csv/
@@ -28,6 +35,9 @@ CSV_DIR = "csv"
 SCHEMA_SQL_PATH = "schema.sql"
 SETNEXTVAL_SQL_PATH = "setnextval.sql"
 SETINDEX_SQL_PATH = "setindex.sql"
+
+# MongoDB 索引腳本路徑
+MONGODB_INDEX_SCRIPT_PATH = "create_nosql_indexes.js"
 
 # 表格與 CSV 檔案的對應關係
 TABLE_MAPPINGS = {
@@ -276,6 +286,132 @@ def read_csv(file_path):
     return data
 
 
+def init_mongodb():
+    """初始化 MongoDB：檢查並建立資料庫、collection 和索引"""
+    try:
+        print("\n📋 MongoDB 初始化...")
+        print(f"   🔗 連線字串: {MONGODB_URI}")
+
+        # 連接到 MongoDB
+        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+
+        # 測試連線
+        try:
+            client.admin.command('ping')
+            print("   ✅ MongoDB 連線成功")
+        except (ConnectionFailure, ServerSelectionTimeoutError) as e:
+            print(f"   ⚠️  MongoDB 連線失敗: {str(e)}")
+            print("   ℹ️  請確認 MongoDB 服務是否正在運行")
+            print("   💡 提示: 執行 'brew services start mongodb-community@7.0' 啟動 MongoDB")
+            return False
+
+        # 檢查資料庫是否存在
+        db_list = client.list_database_names()
+        if MONGODB_DB_NAME in db_list:
+            print(f"   ℹ️  資料庫 '{MONGODB_DB_NAME}' 已存在")
+        else:
+            print(f"   📝 建立資料庫 '{MONGODB_DB_NAME}'...")
+            # MongoDB 會在第一次寫入時自動建立資料庫，所以我們先建立一個空文件
+            db = client[MONGODB_DB_NAME]
+            # 建立一個臨時 collection 並立即刪除，以觸發資料庫建立
+            temp_collection = db["_temp_init"]
+            temp_collection.insert_one({"init": True})
+            temp_collection.drop()
+            print(f"   ✅ 資料庫 '{MONGODB_DB_NAME}' 建立完成")
+
+        # 取得資料庫
+        db = client[MONGODB_DB_NAME]
+
+        # 檢查 collection 是否存在
+        collection_list = db.list_collection_names()
+        if MONGODB_COLLECTION_NAME in collection_list:
+            print(f"   ℹ️  Collection '{MONGODB_COLLECTION_NAME}' 已存在")
+        else:
+            print(f"   📝 建立 Collection '{MONGODB_COLLECTION_NAME}'...")
+            # 建立 collection（插入一筆空文件後刪除，以觸發 collection 建立）
+            collection = db[MONGODB_COLLECTION_NAME]
+            collection.insert_one({"_init": True})
+            collection.delete_one({"_init": True})
+            print(f"   ✅ Collection '{MONGODB_COLLECTION_NAME}' 建立完成")
+
+        # 取得 collection
+        collection = db[MONGODB_COLLECTION_NAME]
+
+        # 建立索引
+        print("   📝 建立索引...")
+        indexes_created = 0
+
+        try:
+            # 1. session_id (唯一索引)
+            collection.create_index([("session_id", 1)], unique=True)
+            print("      ✅ 索引 1: session_id (unique) 建立完成")
+            indexes_created += 1
+        except Exception as e:
+            if "already exists" not in str(e).lower():
+                print(f"      ⚠️  索引 session_id 建立時發生錯誤: {str(e)[:80]}")
+
+        try:
+            # 2. user_token
+            collection.create_index([("user_token", 1)])
+            print("      ✅ 索引 2: user_token 建立完成")
+            indexes_created += 1
+        except Exception as e:
+            if "already exists" not in str(e).lower():
+                print(f"      ⚠️  索引 user_token 建立時發生錯誤: {str(e)[:80]}")
+
+        try:
+            # 3. m_id
+            collection.create_index([("m_id", 1)])
+            print("      ✅ 索引 3: m_id 建立完成")
+            indexes_created += 1
+        except Exception as e:
+            if "already exists" not in str(e).lower():
+                print(f"      ⚠️  索引 m_id 建立時發生錯誤: {str(e)[:80]}")
+
+        try:
+            # 4. created_at
+            collection.create_index([("created_at", 1)])
+            print("      ✅ 索引 4: created_at 建立完成")
+            indexes_created += 1
+        except Exception as e:
+            if "already exists" not in str(e).lower():
+                print(f"      ⚠️  索引 created_at 建立時發生錯誤: {str(e)[:80]}")
+
+        try:
+            # 5. funnel_stage
+            collection.create_index([("funnel_stage", 1)])
+            print("      ✅ 索引 5: funnel_stage 建立完成")
+            indexes_created += 1
+        except Exception as e:
+            if "already exists" not in str(e).lower():
+                print(f"      ⚠️  索引 funnel_stage 建立時發生錯誤: {str(e)[:80]}")
+
+        try:
+            # 6. events.timestamp (巢狀欄位)
+            collection.create_index([("events.timestamp", 1)])
+            print("      ✅ 索引 6: events.timestamp 建立完成")
+            indexes_created += 1
+        except Exception as e:
+            if "already exists" not in str(e).lower():
+                print(f"      ⚠️  索引 events.timestamp 建立時發生錯誤: {str(e)[:80]}")
+
+        print(f"   ✅ MongoDB 索引建立完成（共 {indexes_created} 個索引）")
+
+        # 顯示所有索引
+        existing_indexes = collection.list_indexes()
+        index_count = len(list(existing_indexes))
+        print(f"   ℹ️  目前共有 {index_count} 個索引（包含預設的 _id 索引）")
+
+        client.close()
+        return True
+
+    except Exception as e:
+        print(f"   ❌ MongoDB 初始化失敗: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def import_table(conn, table_name, mapping):
     """匯入單一表格"""
     # 取得腳本所在目錄的絕對路徑
@@ -431,10 +567,20 @@ def main():
         else:
             print("✅ 索引建立完成")
 
+        # 步驟 9: 初始化 MongoDB
+        print("\n📋 步驟 9: 初始化 MongoDB...")
+        if not init_mongodb():
+            print("⚠️  MongoDB 初始化失敗，但 PostgreSQL 資料庫已準備就緒")
+            print("   💡 提示: 請確認 MongoDB 服務是否正在運行")
+        else:
+            print("✅ MongoDB 初始化完成")
+
         # 關閉連線
         conn.close()
 
-        print(f"\n🎉 所有步驟完成！資料庫 {TARGET_DB_NAME} 已準備就緒")
+        print(f"\n🎉 所有步驟完成！")
+        print(f"   ✅ PostgreSQL 資料庫 '{TARGET_DB_NAME}' 已準備就緒")
+        print(f"   ✅ MongoDB 資料庫 '{MONGODB_DB_NAME}' 已準備就緒")
 
     except (psycopg2.Error, IOError, ValueError) as e:
         print(f"❌ 錯誤: {str(e)}")

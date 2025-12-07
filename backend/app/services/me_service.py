@@ -139,7 +139,7 @@ def get_my_reservations(token: str):
                 SELECT r.r_id, r.create_at
                 FROM reservation r
                 join reservation_detail rd on r.r_id = rd.r_id
-                join loan l on rd.rd_id = l.rd_id
+                left join loan l on rd.rd_id = l.rd_id
                 WHERE r.m_id = :m_id and l.actual_return_at is null
                 and r.is_deleted = false
                 order by r.create_at desc
@@ -149,7 +149,7 @@ def get_my_reservations(token: str):
         reservations_list = [dict(row) for row in reservations_row]
         for reservation in reservations_list:
             reservation["items"] = find_items(reservation["r_id"])
-
+        print(reservations_list)
         return True, {"reservations": reservations_list}
     else:
         return False, "Only members can get reservations"

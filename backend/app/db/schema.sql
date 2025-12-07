@@ -77,19 +77,6 @@ CREATE TABLE item_pick (
         ON UPDATE CASCADE
 );
 
-CREATE TABLE item_photo (
-    seq_no INT NOT NULL,
-    i_id BIGINT NOT NULL,
-    file_path VARCHAR(100) NOT NULL, --不知道夠不夠長
-    upload_at TIMESTAMP NOT NULL,
-    PRIMARY KEY (seq_no, i_id),
-
-    FOREIGN KEY (i_id)
-        REFERENCES item(i_id)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE
-);
-
 CREATE TABLE item_verification (
     iv_id BIGSERIAL PRIMARY KEY,
     v_conclusion VARCHAR(10) CHECK(v_conclusion IN ('Pass','Fail','Pending')),

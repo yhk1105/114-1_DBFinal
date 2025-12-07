@@ -88,6 +88,7 @@ def get_item_borrowed_time(i_id: int):
     取得物品借用時間後回傳。
     """
     today = datetime.now().date()
+    
     borrowed_time_row = db.session.execute(
         text("""
             SELECT est_start_at, est_due_at

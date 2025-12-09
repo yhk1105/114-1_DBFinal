@@ -50,7 +50,7 @@ SECRET_KEY=dev-secret
   ```
 
 ## 初始化資料庫（PostgreSQL + MongoDB）
-> 注意：`SetDB.py` 會**刪除並重建**目標資料庫 `our_things`，請先備份需要的資料。
+> 注意：`SetDB.py` 會**刪除並重建**目標資料庫 `our_things`。
 
 ```bash
 cd backend/app/db

@@ -149,7 +149,6 @@ def get_my_reservations(token: str):
         reservations_list = [dict(row) for row in reservations_row]
         for reservation in reservations_list:
             reservation["items"] = find_items(reservation["r_id"])
-        print(reservations_list)
         return True, {"reservations": reservations_list}
     else:
         return False, "Only members can get reservations"

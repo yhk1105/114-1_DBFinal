@@ -119,43 +119,73 @@ def log_event(event_type, endpoint, success=True, error_reason=None, **kwargs):
         user_sessions = db["user_sessions"]
 
         # 更新漏斗階段
-        funnel_stage = determine_funnel_stage(event_type)
+        funnel_stage = determine_funnel_stage(event_type, success)
+
+        update_ops = {
+            "$push": {"events": event},
+            "$set": {
+                "updated_at": datetime.now(timezone.utc)
+            }
+        }
+
+        # 只有當 funnel_stage 不是 unknown 時才更新
+        if funnel_stage != 'unknown':
+            update_ops["$set"]["funnel_stage"] = funnel_stage
 
         user_sessions.update_one(
             {"session_id": session_id},
-            {
-                "$push": {"events": event},
-                "$set": {
-                    "funnel_stage": funnel_stage,
-                    "updated_at": datetime.now(timezone.utc)
-                }
-            }
+            update_ops
         )
 
     except Exception as e:
         # 記錄錯誤但不影響主要業務邏輯
         # 可以選擇記錄到 log 或忽略
+        print(f"Log Event Error: {e}")
         pass
 
 
-def determine_funnel_stage(event_type):
+def determine_funnel_stage(event_type, success=True):
     """
     根據事件類型決定當前漏斗階段
 
     Args:
         event_type: 事件類型
+        success: 事件是否成功 (用於判斷預約結果)
 
     Returns:
         str: 漏斗階段
     """
     stage_mapping = {
+        # Category
         'browse_category': 'browse_category',
         'view_subcategory': 'browse_category',
+        'browse_subcategory': 'browse_category',
+
+        # Item
         'view_item': 'view_item',
+        'get_item_detail': 'view_item',
+
+        # Availability
         'check_availability': 'check_availability',
+        'get_item_borrowed_time': 'check_availability',
+
+        # Pickup
         'view_pickup_places': 'view_pickup_places',
+        'get_pickup_places': 'view_pickup_places',
+
+        # Reservation
         'attempt_reservation': 'attempt_reservation',
+
+        # Explicit stages
         'reservation_success': 'reservation_success',
         'reservation_failed': 'reservation_failed',
     }
+
+    # 特殊處理 create_reservation
+    if event_type == 'create_reservation':
+        if success:
+            return 'reservation_success'
+        else:
+            return 'reservation_failed'
+
     return stage_mapping.get(event_type, 'unknown')

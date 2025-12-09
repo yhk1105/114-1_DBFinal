@@ -21,7 +21,6 @@ def check_item_available(session, i_id: int, p_id: int, est_start_at: datetime, 
         WHERE rd.i_id = :i_id
         AND r.is_deleted = false
         AND ((rd.est_start_at, rd.est_due_at) OVERLAPS (:est_start_at, :est_due_at))
-        FOR UPDATE OF rd
     """), {
         "i_id": i_id,
         "est_start_at": est_start_at,
@@ -246,9 +245,9 @@ def delete_reservation(token: str, r_id: int):
                     db.session.rollback()
                     return False, "You can only cancel the reservation within 24 hours before the start time"
             rds = db.session.execute(text("""
-                SELECT rd_id, i_id, c_id
+                SELECT rd_id, i.i_id, i.c_id
                 FROM reservation_detail
-                join item on reservation_detail.i_id = item.i_id
+                join item i on reservation_detail.i_id = i.i_id
                 WHERE r_id = :r_id
             """), {
                 "r_id": r_id,
@@ -266,14 +265,11 @@ def delete_reservation(token: str, r_id: int):
                     WHERE contribution.m_id = :m_id
                     AND contribution.is_active = false
                     AND item.c_id IN (
-                        -- 找到 root category 下的所有子類別（包括 root 自己）
                         WITH RECURSIVE category_tree AS (
-                            -- 起始點：root category
-                            SELECT c_id FROM category WHERE c_id = :root_c_id
-                            
+                            SELECT c_id 
+                            FROM category 
+                            WHERE c_id = :root_c_id
                             UNION ALL
-                            
-                            -- 遞迴向下查找所有子類別
                             SELECT c.c_id 
                             FROM category c
                             JOIN category_tree ct ON c.parent_c_id = ct.c_id
@@ -298,13 +294,6 @@ def delete_reservation(token: str, r_id: int):
                         "i_id": inactive_contribution["i_id"],
                         "m_id": m_id,
                     })
-            db.session.execute(text("""
-                UPDATE reservation_detail
-                SET is_deleted = true
-                WHERE r_id = :r_id
-            """), {
-                "r_id": r_id,
-            })
             db.session.execute(text("""
                 UPDATE reservation
                 SET is_deleted = true

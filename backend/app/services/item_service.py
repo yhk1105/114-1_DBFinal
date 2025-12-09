@@ -88,12 +88,13 @@ def get_item_borrowed_time(i_id: int):
     取得物品借用時間後回傳。
     """
     today = datetime.now().date()
-    
+
     borrowed_time_row = db.session.execute(
         text("""
             SELECT est_start_at, est_due_at
             FROM reservation_detail
-            WHERE i_id = :i_id and (est_start_at >= :today or est_due_at >= :today)"""
+            join reservation r on reservation_detail.r_id = r.r_id
+            WHERE i_id = :i_id and (est_start_at >= :today or est_due_at >= :today) and r.is_deleted = false"""
              ),
         {"i_id": i_id, "today": today}).mappings().all()
     if not borrowed_time_row:
@@ -156,115 +157,56 @@ def update_item(token: str, i_id: int, data: dict):
         return False, "Unauthorized"
 
     if active_role == "member":
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                # 1. 設定 Serializable
+        try:
+            # 1. 設定 Serializable
+            db.session.execute(
+                text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
+            # 2. 執行你的查詢 (拿掉 FOR UPDATE，讓 Serializable 幫你管)
+            # 注意：這裡不需要再鎖 contribution 了，Serializable 會監控讀取依賴
+
+            check_owner = db.session.execute(
+                text("""
+                    SELECT m_id FROM item
+                    WHERE i_id = :i_id and m_id = :user_id
+                """),  # 移除了 FOR UPDATE
+                {"i_id": i_id, "user_id": user_id}).mappings().first()
+
+            if not check_owner:
+                db.session.rollback()
+                return False, "Item not found"
+
+            item_original = db.session.execute(
+                text("""
+                        SELECT item.i_id, item.i_name, item.status, item.description, item.out_duration, item.c_id, contribution.is_active FROM item
+                        join contribution on item.i_id = contribution.i_id
+                        WHERE item.i_id = :i_id and item.m_id = :user_id
+                        FOR UPDATE
+                    """),
+                {"i_id": i_id, "user_id": user_id}).mappings().first()
+            if item_original["status"] == "Borrowed":
+                db.session.rollback()
+                return False, "Item is borrowed, cannot be edited"
+
+            # 追蹤是否有任何更新（用於判斷是否需要重新審核）
+            has_updates = False
+
+            if data.get("i_name"):  # update name
+                has_updates = True
                 db.session.execute(
-                    text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
-                # 2. 執行你的查詢 (拿掉 FOR UPDATE，讓 Serializable 幫你管)
-                # 注意：這裡不需要再鎖 contribution 了，Serializable 會監控讀取依賴
-
-                check_owner = db.session.execute(
                     text("""
-                        SELECT m_id FROM item
+                        UPDATE item
+                        SET i_name = :i_name
                         WHERE i_id = :i_id and m_id = :user_id
-                    """),  # 移除了 FOR UPDATE
-                    {"i_id": i_id, "user_id": user_id}).mappings().first()
-
-                if not check_owner:
-                    db.session.rollback()
-                    return False, "Item not found"
-
-                item_original = db.session.execute(
-                    text("""
-                            SELECT item.i_id, item.i_name, item.status, item.description, item.out_duration, item.c_id, contribution.is_active FROM item
-                            join contribution on item.i_id = contribution.i_id
-                            WHERE item.i_id = :i_id and item.m_id = :user_id
-                            FOR UPDATE
-                        """),
-                    {"i_id": i_id, "user_id": user_id}).mappings().first()
-                if item_original["status"] == "Borrowed":
-                    db.session.rollback()
-                    return False, "Item is borrowed, cannot be edited"
-
-                # 追蹤是否有任何更新（用於判斷是否需要重新審核）
-                has_updates = False
-
-                if data.get("i_name"):  # update name
-                    has_updates = True
-                    db.session.execute(
-                        text("""
-                            UPDATE item
-                            SET i_name = :i_name
-                            WHERE i_id = :i_id and m_id = :user_id
-                            
-                        """),
-                        {"i_id": i_id, "user_id": user_id, "i_name": data["i_name"]})
-                # update status
-                if item_original.get("status") != "Not verified" and data.get("status") and data["status"] != item_original["status"]:
-                    if data["status"] == "Not reservable":
-                        if item_original["status"] == "Borrowed":
-                            db.session.rollback()
-                            return False, "Item is borrowed"
-                        if item_original["is_active"] is False:
-                            ok = change_contribution(db.session, user_id, i_id)
-                            if not ok:
-                                db.session.rollback()
-                                return False, "Cannot change contribution"
-                        db.session.execute(
-                            text("""
-                                UPDATE item
-                                SET status = :status
-                                WHERE i_id = :i_id and m_id = :user_id
-                            """),
-                            {"i_id": i_id, "user_id": user_id, "status": "Not reservable"})
-
-                    elif data["status"] == "Reservable":  # 他要重新上架的話需要重新認證
-                        db.session.execute(
-                            text("""
-                                UPDATE contribution
-                                SET is_active = False
-                                WHERE i_id = :i_id
-                            """),
-                            {"i_id": i_id})
-                        db.session.execute(
-                            text("""
-                                UPDATE item
-                                SET status = :status
-                                WHERE i_id = :i_id and m_id = :user_id
-                            """),
-                            {"i_id": i_id, "user_id": user_id, "status": "Not verified"})
-                        check_ban = db.session.execute(
-                            text("""
-                                SELECT is_banned FROM member
-                                WHERE m_id = :user_id
-                            """),
-                            {"user_id": user_id}).mappings().first()
-                        if check_ban["is_banned"]:
-                            db.session.rollback()
-                            return False, "Member is banned"
-                if data.get("description"):  # update description
-                    has_updates = True
-                    db.session.execute(
-                        text("""
-                            UPDATE item
-                            SET description = :description
-                            WHERE i_id = :i_id and m_id = :user_id
-                        """),
-                        {"i_id": i_id, "user_id": user_id, "description": data["description"]})
-                if data.get("out_duration"):  # update out_duration
-                    has_updates = True
-                    db.session.execute(
-                        text("""
-                            UPDATE item
-                            SET out_duration = :out_duration
-                            WHERE i_id = :i_id and m_id = :user_id
-                        """),
-                        {"i_id": i_id, "user_id": user_id, "out_duration": data["out_duration"]})
-                if data.get("c_id"):  # update c_id
-                    has_updates = True
-                    if item_original['status'] =="reservable":
+                        
+                    """),
+                    {"i_id": i_id, "user_id": user_id, "i_name": data["i_name"]})
+            # update status
+            if item_original.get("status") != "Not verified" and data.get("status") and data["status"] != item_original["status"]:
+                if data["status"] == "Not reservable":
+                    if item_original["status"] == "Borrowed":
+                        db.session.rollback()
+                        return False, "Item is borrowed"
+                    if item_original["is_active"] is False:
                         ok = change_contribution(db.session, user_id, i_id)
                         if not ok:
                             db.session.rollback()
@@ -272,55 +214,12 @@ def update_item(token: str, i_id: int, data: dict):
                     db.session.execute(
                         text("""
                             UPDATE item
-                            SET c_id = :c_id
+                            SET status = :status
                             WHERE i_id = :i_id and m_id = :user_id
                         """),
-                        {"i_id": i_id, "user_id": user_id, "c_id": data["c_id"]})
-                if data.get("p_id_list"):
-                    has_updates = True
-                    # 取得目前資料庫中該 item 的所有 pick records
-                    existing_picks = db.session.execute(
-                        text("""
-                            SELECT p_id, is_deleted FROM item_pick
-                            WHERE i_id = :i_id
-                        """),
-                        {"i_id": i_id}).mappings().all()
-                    existing_p_ids = {
-                        pick["p_id"]: pick for pick in existing_picks}
-                    new_p_id_list = data["p_id_list"]
+                        {"i_id": i_id, "user_id": user_id, "status": "Not reservable"})
 
-                    # 檢查每個新的 p_id
-                    for p_id in new_p_id_list:
-                        if p_id in existing_p_ids:
-                            # 如果本來就有，且目前是不活躍 (is_active=False)，則設為 True
-                            if not existing_p_ids[p_id]["is_deleted"]:
-                                db.session.execute(
-                                    text("""
-                                        UPDATE item_pick
-                                        SET is_deleted = False
-                                        WHERE i_id = :i_id and p_id = :p_id
-                                    """),
-                                    {"i_id": i_id, "p_id": p_id})
-                        else:
-                            # 如果本來沒有，則新增
-                            new_pick = ItemPick(
-                                i_id=i_id, p_id=p_id)
-                            db.session.add(new_pick)
-
-                    # 檢查是否有被移除的 p_id (在資料庫中有，但在新清單中沒有)
-                    for p_id, pick in existing_p_ids.items():
-                        if p_id not in new_p_id_list:
-                            db.session.execute(
-                                text("""
-                                    UPDATE item_pick
-                                    SET is_deleted = True
-                                    WHERE i_id = :i_id and p_id = :p_id
-                                """),
-                                {"i_id": i_id, "p_id": p_id})
-
-                # 如果物品狀態是 "Not reservable" 且用戶進行了任何更新，則改回 "Not verified" 並重置審核狀態
-                if item_original["status"] == "Not reservable" and has_updates:
-                    # 將 contribution 的 is_active 設為 False（需要重新審核）
+                elif data["status"] == "Reservable":  # 他要重新上架的話需要重新認證
                     db.session.execute(
                         text("""
                             UPDATE contribution
@@ -328,42 +227,137 @@ def update_item(token: str, i_id: int, data: dict):
                             WHERE i_id = :i_id
                         """),
                         {"i_id": i_id})
-                    # 將狀態改回 "Not verified"
                     db.session.execute(
                         text("""
                             UPDATE item
-                            SET status = 'Not verified'
+                            SET status = :status
                             WHERE i_id = :i_id and m_id = :user_id
                         """),
-                        {"i_id": i_id, "user_id": user_id})
-
-                item_row = db.session.execute(
+                        {"i_id": i_id, "user_id": user_id, "status": "Not verified"})
+                    check_ban = db.session.execute(
+                        text("""
+                            SELECT is_banned FROM member
+                            WHERE m_id = :user_id
+                        """),
+                        {"user_id": user_id}).mappings().first()
+                    if check_ban["is_banned"]:
+                        db.session.rollback()
+                        return False, "Member is banned"
+            if data.get("description"):  # update description
+                has_updates = True
+                db.session.execute(
                     text("""
-                        SELECT i_id, i_name, status, description, out_duration, c_id
-                        FROM item
+                        UPDATE item
+                        SET description = :description
                         WHERE i_id = :i_id and m_id = :user_id
                     """),
-                    {"i_id": i_id, "user_id": user_id}).mappings().first()
-                db.session.commit()
-                item_row = dict(item_row)
-                return True, {"item": item_row}
+                    {"i_id": i_id, "user_id": user_id, "description": data["description"]})
+            if data.get("out_duration"):  # update out_duration
+                has_updates = True
+                db.session.execute(
+                    text("""
+                        UPDATE item
+                        SET out_duration = :out_duration
+                        WHERE i_id = :i_id and m_id = :user_id
+                    """),
+                    {"i_id": i_id, "user_id": user_id, "out_duration": data["out_duration"]})
+            if data.get("c_id"):  # update c_id
+                has_updates = True
+                if item_original['status'] =="reservable":
+                    ok = change_contribution(db.session, user_id, i_id)
+                    if not ok:
+                        db.session.rollback()
+                        return False, "Cannot change contribution"
+                db.session.execute(
+                    text("""
+                        UPDATE item
+                        SET c_id = :c_id
+                        WHERE i_id = :i_id and m_id = :user_id
+                    """),
+                    {"i_id": i_id, "user_id": user_id, "c_id": data["c_id"]})
+            if data.get("p_id_list"):
+                has_updates = True
+                # 取得目前資料庫中該 item 的所有 pick records
+                existing_picks = db.session.execute(
+                    text("""
+                        SELECT p_id, is_deleted FROM item_pick
+                        WHERE i_id = :i_id
+                    """),
+                    {"i_id": i_id}).mappings().all()
+                existing_p_ids = {
+                    pick["p_id"]: pick for pick in existing_picks}
+                new_p_id_list = data["p_id_list"]
 
-            except OperationalError as e:
-                db.session.rollback()
-                # 檢查是不是 Serialization Failure (PostgreSQL error code 40001)
-                # 或是 Deadlock
-                if "could not serialize access" in str(e) or "deadlock detected" in str(e):
-                    if attempt < max_retries - 1:
-                        # 等一下再重試 (Exponential Backoff)
-                        time.sleep(0.1 * (attempt + 1))
-                        continue
+                # 檢查每個新的 p_id
+                for p_id in new_p_id_list:
+                    if p_id in existing_p_ids:
+                        # 如果本來就有，且目前是不活躍 (is_active=False)，則設為 True
+                        if not existing_p_ids[p_id]["is_deleted"]:
+                            db.session.execute(
+                                text("""
+                                    UPDATE item_pick
+                                    SET is_deleted = False
+                                    WHERE i_id = :i_id and p_id = :p_id
+                                """),
+                                {"i_id": i_id, "p_id": p_id})
                     else:
-                        return False, "System busy, please try again later"
-                raise e  # 如果是其他錯誤，直接噴錯
-            except Exception as e:
-                print(e)
-                db.session.rollback()
-                return False, str(e)
+                        # 如果本來沒有，則新增
+                        new_pick = ItemPick(
+                            i_id=i_id, p_id=p_id)
+                        db.session.add(new_pick)
+
+                # 檢查是否有被移除的 p_id (在資料庫中有，但在新清單中沒有)
+                for p_id, pick in existing_p_ids.items():
+                    if p_id not in new_p_id_list:
+                        db.session.execute(
+                            text("""
+                                UPDATE item_pick
+                                SET is_deleted = True
+                                WHERE i_id = :i_id and p_id = :p_id
+                            """),
+                            {"i_id": i_id, "p_id": p_id})
+
+            # 如果物品狀態是 "Not reservable" 且用戶進行了任何更新，則改回 "Not verified" 並重置審核狀態
+            if item_original["status"] == "Not reservable" and has_updates:
+                # 將 contribution 的 is_active 設為 False（需要重新審核）
+                db.session.execute(
+                    text("""
+                        UPDATE contribution
+                        SET is_active = False
+                        WHERE i_id = :i_id
+                    """),
+                    {"i_id": i_id})
+                # 將狀態改回 "Not verified"
+                db.session.execute(
+                    text("""
+                        UPDATE item
+                        SET status = 'Not verified'
+                        WHERE i_id = :i_id and m_id = :user_id
+                    """),
+                    {"i_id": i_id, "user_id": user_id})
+
+            item_row = db.session.execute(
+                text("""
+                    SELECT i_id, i_name, status, description, out_duration, c_id
+                    FROM item
+                    WHERE i_id = :i_id and m_id = :user_id
+                """),
+                {"i_id": i_id, "user_id": user_id}).mappings().first()
+            db.session.commit()
+            item_row = dict(item_row)
+            return True, {"item": item_row}
+
+        except OperationalError as e:
+            db.session.rollback()
+            # 檢查是不是 Serialization Failure (PostgreSQL error code 40001)
+            # 或是 Deadlock
+            if "could not serialize access" in str(e) or "deadlock detected" in str(e):
+                return False, "System busy, please try again later"
+            raise e  # 如果是其他錯誤，直接噴錯
+        except Exception as e:
+            print(e)
+            db.session.rollback()
+            return False, str(e)
 
 
 def report_item(token: str, i_id: int, data: dict):
